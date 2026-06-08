@@ -1,0 +1,2071 @@
+{
+  "nodes": {
+    "faculty": {
+      "Jose Silva-Martinez": {
+        "name": "Jose Silva-Martinez",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "TI Professor I in Analog Engineering"
+        ],
+        "office": "WEB 318B",
+        "phone": "979-845-7477",
+        "email": "jose-silva-martinez@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals"
+        ]
+      },
+      "Kamran Entesari": {
+        "name": "Kamran Entesari",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Texas Instruments Engineering Professor"
+        ],
+        "office": "WEB 315C",
+        "phone": "979-845-9586",
+        "email": "kentesar@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals",
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Sebastian Hoyos": {
+        "name": "Sebastian Hoyos",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 315D",
+        "phone": "979-862-4253",
+        "email": "hoyos@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals"
+        ]
+      },
+      "Aydin Karsilayan": {
+        "name": "Aydin Karsilayan",
+        "titles": [
+          "Co-Director of Undergraduate Programs, Electrical & Computer Engineering",
+          "Associate Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 318C",
+        "phone": "979-458-3555",
+        "email": "karsilay@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals"
+        ]
+      },
+      "Oscar Moreira": {
+        "name": "Oscar Moreira",
+        "titles": [
+          "Professor of Practice, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 315E",
+        "phone": "979-458-7819",
+        "email": "omoreira@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals"
+        ]
+      },
+      "Sam Palermo": {
+        "name": "Sam Palermo",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "J.W. Runyon Jr. Professor"
+        ],
+        "office": "WEB 318E",
+        "phone": "979-458-4114",
+        "email": "spalermo@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals"
+        ]
+      },
+      "Milad Koohi": {
+        "name": "Milad Koohi",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering",
+          "Affiliated Faculty, Materials Science & Engineering"
+        ],
+        "office": "WEB 205D",
+        "phone": "979-458-4002",
+        "email": "koohi@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "research_areas": [
+          "Analog and Mixed Signals",
+          "Device Science and Nanotechnology",
+          "Chip Manufacturing",
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Ulisses Braga-Neto": {
+        "name": "Ulisses Braga-Neto",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 236B",
+        "phone": "979-862-6441",
+        "email": "ulisses@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Prasad Enjeti": {
+        "name": "Prasad Enjeti",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Texas Instruments Jack Kilby Chair"
+        ],
+        "office": "WEB 301F",
+        "phone": "979-845-7466",
+        "email": "enjeti@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Chip Manufacturing",
+          "Communications and Networks",
+          "Energy and Power",
+          "Security"
+        ]
+      },
+      "Costas N. Georghiades": {
+        "name": "Costas N. Georghiades",
+        "titles": [
+          "Interim Vice President for Research",
+          "Professor, Electrical & Computer Engineering",
+          "Delbert A. Whitaker Chair",
+          "Affiliated Faculty, Multidisciplinary Engineering"
+        ],
+        "office": "WEB 301S",
+        "phone": "979-845-7408",
+        "email": "georghiades@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Communications and Networks",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "I-Hong Hou": {
+        "name": "I-Hong Hou",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 301H",
+        "phone": "979-862-1092",
+        "email": "ihou@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems",
+          "Communications and Networks"
+        ]
+      },
+      "Jiang Hu": {
+        "name": "Jiang Hu",
+        "titles": [
+          "Co-Director of Graduate Programs, Electrical & Computer Engineering",
+          "Professor, Electrical & Computer Engineering",
+          "Eric D. Rubin '06 Endowed Professor",
+          "Affiliated Faculty, Computer Science & Engineering"
+        ],
+        "office": "WEB 333L",
+        "phone": "979-847-8768",
+        "email": "jianghu@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems",
+          "Chip Manufacturing"
+        ]
+      },
+      "Dileep Kalathil": {
+        "name": "Dileep Kalathil",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering",
+          "Holleran-Bowman Faculty Fellow",
+          "Affiliated Faculty, Computer Science & Engineering"
+        ],
+        "office": "WEB 334G",
+        "phone": "979-458-7884",
+        "email": "dileep.kalathil@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Sunil Khatri": {
+        "name": "Sunil Khatri",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 333F",
+        "phone": "979-845-8371",
+        "email": "sunilkhatri@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems",
+          "Chip Manufacturing",
+          "Security"
+        ]
+      },
+      "Joshua Peeples": {
+        "name": "Joshua Peeples",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 212E",
+        "phone": "979-458-7026",
+        "email": "jpeeples@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Xiaoning Qian": {
+        "name": "Xiaoning Qian",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Segers Family Dean's Excellence Professorship II",
+          "Affiliated Faculty, Computer Science and Engineering",
+          "Associate Professor, Electrical & Computer Engineering",
+          "ASCEND Fellow"
+        ],
+        "office": "WEB 334J",
+        "phone": "979-845-1612",
+        "email": "jv.rajendran@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Biomedical Imaging, Sensing and Genomic Signal Processing"
+        ]
+      },
+      "B. Don Russell": {
+        "name": "B. Don Russell",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Member, National Academy of Engineering",
+          "Harry E. Bovay, Jr. Chair",
+          "University Distinguished Professor",
+          "Regents Professor"
+        ],
+        "office": "WEB 238",
+        "phone": "979-845-7912",
+        "email": "bdrussell@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Energy and Power"
+        ]
+      },
+      "Srinivas Shakkottai": {
+        "name": "Srinivas Shakkottai",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Affiliated Faculty, Computer Science and Engineering",
+          "Debbie & Dennis Segers ‘75 Professorship"
+        ],
+        "office": "WEB 332C",
+        "phone": "979-458-0094",
+        "email": "sshakkot@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Communications and Networks",
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Yang Shen": {
+        "name": "Yang Shen",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering",
+          "Affiliated Faculty, Computer Science and Engineering"
+        ],
+        "office": "WEB 215I",
+        "phone": "979-862-1694",
+        "email": "yshen@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Biomedical Imaging, Sensing and Genomic Signal Processing"
+        ]
+      },
+      "Erchin Serpedin": {
+        "name": "Erchin Serpedin",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 310MC&B",
+        "phone": "979-458-2287",
+        "email": "eserpedin@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Communications and Networks",
+          "Biomedical Imaging, Sensing and Genomic Signal Processing",
+          "Information Science and Learning Systems",
+          "Security"
+        ]
+      },
+      "Chao Tian": {
+        "name": "Chao Tian",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 301R",
+        "phone": "",
+        "email": "chao.tian@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Communications and Networks",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Hamid A. Toliyat": {
+        "name": "Hamid A. Toliyat",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Robert Kennedy '26 Chair"
+        ],
+        "office": "WEB 237C",
+        "phone": "979-862-3034",
+        "email": "toliyat@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Energy and Power"
+        ]
+      },
+      "Zixiang Xiong": {
+        "name": "Zixiang Xiong",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 334H",
+        "phone": "979-862-8683",
+        "email": "zixiang-xiong@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Communications and Networks",
+          "Biomedical Imaging, Sensing and Genomic Signal Processing",
+          "Information Science and Learning Systems",
+          "Security"
+        ]
+      },
+      "Tie Liu": {
+        "name": "Tie Liu",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Professor, Electrical & Computer Engineering",
+          "Debbie and Dennis Segers '75 Professor"
+        ],
+        "office": "WEB 310B",
+        "phone": "979-862-8744",
+        "email": "smiller@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/communications-and-networks.html",
+        "research_areas": [
+          "Communications and Networks",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Krishna Narayanan": {
+        "name": "Krishna Narayanan",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Edgar and Yolanda Sanchez Endowed Chair",
+          "Associate Head for AI"
+        ],
+        "office": "WEB 334K",
+        "phone": "979-862-2691",
+        "email": "krn@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/communications-and-networks.html",
+        "research_areas": [
+          "Communications and Networks",
+          "Computer Engineering and Systems",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Narasimha Reddy": {
+        "name": "Narasimha Reddy",
+        "titles": [
+          "Department Head, Electrical & Computer Engineering",
+          "Professor, Electrical & Computer Engineering",
+          "Regents Professor",
+          "Truchard Foundation Chair Professor"
+        ],
+        "office": "",
+        "phone": "979-845-7598",
+        "email": "reddy@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/communications-and-networks.html",
+        "research_areas": [
+          "Communications and Networks",
+          "Computer Engineering and Systems",
+          "Security"
+        ]
+      },
+      "Serap Savari": {
+        "name": "Serap Savari",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 308G",
+        "phone": "979-845-6824",
+        "email": "savari@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/communications-and-networks.html",
+        "research_areas": [
+          "Communications and Networks",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Xi Zhang": {
+        "name": "Xi Zhang",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 331D",
+        "phone": "979-458-1416",
+        "email": "xizhang@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/communications-and-networks.html",
+        "research_areas": [
+          "Communications and Networks",
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Kevin Nowka": {
+        "name": "Kevin Nowka",
+        "titles": [
+          "Co-Director of Undergraduate Programs, Electrical & Computer Engineering",
+          "Professor of Practice, Electrical & Computer Engineering",
+          "TI Texas A&M Former Students Professor of Practice Fellow"
+        ],
+        "office": "WEB 235A",
+        "phone": "979-458-8642",
+        "email": "kjnowka@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Jean-Francois Chamberland": {
+        "name": "Jean-Francois Chamberland",
+        "titles": [
+          "Associate Dean for Faculty Success",
+          "Professor, Electrical & Computer Engineering",
+          "Albers Family Endowed Faculty Fellow",
+          "Affiliated Faculty, Multidisciplinary Engineering"
+        ],
+        "office": "WEB 301RA",
+        "phone": "979-845-6204",
+        "email": "chmbrlnd@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems",
+          "Communications and Networks",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Gwan Choi": {
+        "name": "Gwan Choi",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 333G",
+        "phone": "979-845-7486",
+        "email": "gwanchoi@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Nick Duffield": {
+        "name": "Nick Duffield",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Royce E. Wisenbaker Professor I",
+          "Director, Texas A&M Institute of Data Science",
+          "Affiliated Faculty, Computer Science & Engineering"
+        ],
+        "office": "WEB 332D",
+        "phone": "979-845-7328",
+        "email": "duffieldng@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Paul Gratz": {
+        "name": "Paul Gratz",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Affiliated Faculty, Computer Science & Engineering",
+          "Eugene E. Webb ‘43 Professorship"
+        ],
+        "office": "WEB 333M",
+        "phone": "979-488-4551",
+        "email": "pgratz@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems",
+          "Chip Manufacturing",
+          "Security"
+        ]
+      },
+      "Stavros Kalafatis": {
+        "name": "Stavros Kalafatis",
+        "titles": [
+          "Professor of Practice, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205E",
+        "phone": "979-458-8429",
+        "email": "skalafatis-tamu@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "P.R. Kumar": {
+        "name": "P.R. Kumar",
+        "titles": [
+          "Professor, Electrical & Computer Engineering and Industrial & Systems Engineering",
+          "Regents Professor",
+          "Distinguished Professor",
+          "O’Donnell Foundation Chair I",
+          "Member, National Academy of Engineering"
+        ],
+        "office": "WEB 331E",
+        "phone": "979-862-3376",
+        "email": "prk@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems",
+          "Communications and Networks",
+          "Information Science and Learning Systems",
+          "Security"
+        ]
+      },
+      "Mi Lu": {
+        "name": "Mi Lu",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 332E",
+        "phone": "979-845-3749",
+        "email": "mlu@ece.tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Varun Murali": {
+        "name": "Varun Murali",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 333E",
+        "phone": "979-458-7926",
+        "email": "mvarun@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Weiping Shi": {
+        "name": "Weiping Shi",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 333K",
+        "phone": "979-845-3820",
+        "email": "wshi@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Karan L. Watson": {
+        "name": "Karan L. Watson",
+        "titles": [
+          "Senior Professor, Electrical & Computer Engineering",
+          "Regents Professor",
+          "Interim Director, Institute for Engineering Education and Innovation (IEEI)"
+        ],
+        "office": "WEB 205G",
+        "phone": "979-458-5315",
+        "email": "watson@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Jun Zou": {
+        "name": "Jun Zou",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205I",
+        "phone": "979-862-1640",
+        "email": "junzou@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology",
+          "Chip Manufacturing"
+        ]
+      },
+      "Jiarui Gong": {
+        "name": "Jiarui Gong",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 214G",
+        "phone": "979-458-3768",
+        "email": "jgong@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology",
+          "Chip Manufacturing"
+        ]
+      },
+      "H. Rusty Harris": {
+        "name": "H. Rusty Harris",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205M",
+        "phone": "979-845-4217",
+        "email": "rusty.harris@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology"
+        ]
+      },
+      "Philip Hemmer": {
+        "name": "Philip Hemmer",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 235G",
+        "phone": "979-845-8932",
+        "email": "prhemmer@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology"
+        ]
+      },
+      "Linda Katehi": {
+        "name": "Linda Katehi",
+        "titles": [
+          "Professor, Electrical & Computer Engineering and Materials Science & Engineering",
+          "O'Donnell Foundation Chair II",
+          "Member, National Academy of Engineering"
+        ],
+        "office": "WEB 205C",
+        "phone": "979-458-6556",
+        "email": "katehi@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology",
+          "Chip Manufacturing",
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Laszlo B. Kish": {
+        "name": "Laszlo B. Kish",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 235E",
+        "phone": "979-847-9071",
+        "email": "laszlokish@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology",
+          "Communications and Networks",
+          "Security"
+        ]
+      },
+      "Pao-Tai Lin": {
+        "name": "Pao-Tai Lin",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering and Materials Science & Engineering",
+          "Director, Mid-Infrared Integrated Photonics and Remote Sensing (MiPRoS) Laboratory"
+        ],
+        "office": "WEB 214F",
+        "phone": "979-458-8223",
+        "email": "paolin@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology"
+        ]
+      },
+      "Peter Rentzepis": {
+        "name": "Peter Rentzepis",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Texas Instruments (TI) Chair",
+          "Member, National Academy of Science",
+          "Affiliated Faculty, Biomedical Engineering"
+        ],
+        "office": "WEB 235C",
+        "phone": "979-845-7250",
+        "email": "prentzepis@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology"
+        ]
+      },
+      "Suin Yi": {
+        "name": "Suin Yi",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205F",
+        "phone": "979-845-7564",
+        "email": "yisuin@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "research_areas": [
+          "Device Science and Nanotechnology",
+          "Artificial Intelligence and Machine Learning",
+          "Computer Engineering and Systems",
+          "Chip Manufacturing"
+        ]
+      },
+      "Byung-Jun Yoon": {
+        "name": "Byung-Jun Yoon",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205L",
+        "phone": "979-845-6942",
+        "email": "bjyoon@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "research_areas": [
+          "Artificial Intelligence and Machine Learning",
+          "Biomedical Imaging, Sensing and Genomic Signal Processing"
+        ]
+      },
+      "Stanley Williams": {
+        "name": "Stanley Williams",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Hewlett Packard Enterprise Company Chair"
+        ],
+        "office": "",
+        "phone": "",
+        "email": "rstanleywilliams@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "research_areas": [
+          "Computer Engineering and Systems"
+        ]
+      },
+      "Raffaella Righetti": {
+        "name": "Raffaella Righetti",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 309D",
+        "phone": "979-862-8586",
+        "email": "rrighetti@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/biomedical-imaging-sensing-genomic-signal-processing.html",
+        "research_areas": [
+          "Biomedical Imaging, Sensing and Genomic Signal Processing"
+        ]
+      },
+      "Aniruddha Datta": {
+        "name": "Aniruddha Datta",
+        "titles": [
+          "Co-Director of Graduate Programs, Electrical & Computer Engineering",
+          "Professor, Electrical & Computer Engineering",
+          "J.W. Runyon, Jr. '35 Professor II"
+        ],
+        "office": "WEB 212F",
+        "phone": "979-845-5917",
+        "email": "a-datta@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/biomedical-imaging-sensing-genomic-signal-processing.html",
+        "research_areas": [
+          "Biomedical Imaging, Sensing and Genomic Signal Processing",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Arum Han": {
+        "name": "Arum Han",
+        "titles": [
+          "Associate Dean for Research, Texas A&M College of Engineering",
+          "Associate Agency Director, Texas A&M Engineering Experiment Station",
+          "Project Office Director for CHIPS, Strategic Advanced Research Unit, Texas A&M Engineering Experiment Station",
+          "Professor, Electrical & Computer Engineering",
+          "Texas Instruments Professorship II",
+          "Chancellor EDGES Fellow",
+          "Presidential Impact Fellow",
+          "Affiliated Faculty, Biomedical Engineering and Chemical Engineering"
+        ],
+        "office": "WEB 309C, GERB 237",
+        "phone": "979-845-9686",
+        "email": "arum.han@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/biomedical-imaging-sensing-genomic-signal-processing.html",
+        "research_areas": [
+          "Biomedical Imaging, Sensing and Genomic Signal Processing",
+          "Chip Manufacturing"
+        ]
+      },
+      "Jim Ji": {
+        "name": "Jim Ji",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 309E",
+        "phone": "979-458-1468",
+        "email": "jimji@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/biomedical-imaging-sensing-genomic-signal-processing.html",
+        "research_areas": [
+          "Biomedical Imaging, Sensing and Genomic Signal Processing"
+        ]
+      },
+      "Steven M. Wright": {
+        "name": "Steven M. Wright",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 310D",
+        "phone": "979-845-9413",
+        "email": "smwright@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/biomedical-imaging-sensing-genomic-signal-processing.html",
+        "research_areas": [
+          "Biomedical Imaging, Sensing and Genomic Signal Processing",
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Marco Iskander": {
+        "name": "Marco Iskander",
+        "titles": [
+          "Instructional Assistant Professor, Electrical & Computer Engineering",
+          "Managing Director of Intelligent Electromagnetic Sensor Laboratories (iEMSL)"
+        ],
+        "office": "WEB 218D",
+        "phone": "979-458-7027",
+        "email": "marcoi@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/electromagnetics-microwaves.html",
+        "research_areas": [
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Arya Menon": {
+        "name": "Arya Menon",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 218C",
+        "phone": "979-845-9628",
+        "email": "aryamenon@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/electromagnetics-microwaves.html",
+        "research_areas": [
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Krzysztof Arkadiusz Michalski": {
+        "name": "Krzysztof Arkadiusz Michalski",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205H",
+        "phone": "979-845-5203",
+        "email": "k-michalski@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/electromagnetics-microwaves.html",
+        "research_areas": [
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Robert D. Nevels": {
+        "name": "Robert D. Nevels",
+        "titles": [
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 205K",
+        "phone": "979-845-7591",
+        "email": "r-nevels@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/electromagnetics-microwaves.html",
+        "research_areas": [
+          "Electromagnetics and Microwaves"
+        ]
+      },
+      "Thomas Overbye": {
+        "name": "Thomas Overbye",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "O'Donnell Foundation Chair III",
+          "Director, Smart Grid Center",
+          "Member, National Academy of Engineering"
+        ],
+        "office": "WEB 308C",
+        "phone": "979-458-5001",
+        "email": "overbye@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Robert S. Balog": {
+        "name": "Robert S. Balog",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Director, Renewable Energy and Advanced Power Electronics Laboratory (REAPER)",
+          "Affiliated Faculty, Multidisciplinary Engineering"
+        ],
+        "office": "WEB 236A",
+        "phone": "979-862-4985",
+        "email": "rbalog@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Miroslav M. Begovic": {
+        "name": "Miroslav M. Begovic",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Moore Professor"
+        ],
+        "office": "WEB 320E",
+        "phone": "979-862-1553",
+        "email": "begovic@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Adam Birchfield": {
+        "name": "Adam Birchfield",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 215E",
+        "phone": "979-862-2545",
+        "email": "abirchfield@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Karen L. Butler-Purry": {
+        "name": "Karen L. Butler-Purry",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Raytheon Company Professorship"
+        ],
+        "office": "WEB 334F",
+        "phone": "979-847-9048",
+        "email": "klbutler@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Xin Chen": {
+        "name": "Xin Chen",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 215F",
+        "phone": "979-845-7469",
+        "email": "xin_chen@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Katherine Davis": {
+        "name": "Katherine Davis",
+        "titles": [
+          "Associate Professor, Electrical & Computer Engineering",
+          "Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 214H",
+        "phone": "979-458-5093",
+        "email": "katedavis@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Mladen Kezunovic": {
+        "name": "Mladen Kezunovic",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Member, National Academy of Engineering",
+          "Wofford Cain Chair IV",
+          "University Distinguished Professor",
+          "Regents Professor"
+        ],
+        "office": "WEB 323C",
+        "phone": "979-845-7509",
+        "email": "kezunov@ece.tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Sandip Roy": {
+        "name": "Sandip Roy",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Director, Global Cyber Research Institute"
+        ],
+        "office": "WEB 224H",
+        "phone": "979-845-7476",
+        "email": "sandip@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power",
+          "Information Science and Learning Systems"
+        ]
+      },
+      "Chanan Singh": {
+        "name": "Chanan Singh",
+        "titles": [
+          "Professor, Electrical & Computer Engineering",
+          "Regents Professor",
+          "Irma Runyon Chair",
+          "University Distinguished Professor",
+          "Member, National Academy of Engineering"
+        ],
+        "office": "WEB 320C",
+        "phone": "979-845-7589",
+        "email": "singh@ece.tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "research_areas": [
+          "Energy and Power"
+        ]
+      },
+      "Zhiwen Fan": {
+        "name": "Zhiwen Fan",
+        "titles": [
+          "Assistant Professor, Electrical & Computer Engineering"
+        ],
+        "office": "WEB 301G",
+        "phone": "979-458-0092",
+        "email": "zhiwenfan@tamu.edu",
+        "source_url": "https://engineering.tamu.edu/electrical/research/information-science-and-systems.html",
+        "research_areas": [
+          "Information Science and Learning Systems"
+        ]
+      }
+    },
+    "research_areas": {
+      "Analog and Mixed Signals": {
+        "name": "Analog and Mixed Signals",
+        "url": "https://engineering.tamu.edu/electrical/research/analog-mixed-signals.html",
+        "description": "Analog and Mixed Signal Research areas include high speed electrical and optical I/O interfaces, clock recovery systems, RF transceivers, harvesting circuits, RF MEMS, active and passive sensors,",
+        "faculty": [
+          "Jose Silva-Martinez",
+          "Kamran Entesari",
+          "Sebastian Hoyos",
+          "Aydin Karsilayan",
+          "Oscar Moreira",
+          "Sam Palermo",
+          "Milad Koohi"
+        ]
+      },
+      "Artificial Intelligence and Machine Learning": {
+        "name": "Artificial Intelligence and Machine Learning",
+        "url": "https://engineering.tamu.edu/electrical/research/artificial-intelligence-and-machine-learning.html",
+        "description": "Artificial Intelligence and Machine Learning",
+        "faculty": [
+          "Ulisses Braga-Neto",
+          "Prasad Enjeti",
+          "Costas N. Georghiades",
+          "I-Hong Hou",
+          "Jiang Hu",
+          "Dileep Kalathil",
+          "Sunil Khatri",
+          "Joshua Peeples",
+          "Xiaoning Qian",
+          "B. Don Russell",
+          "Srinivas Shakkottai",
+          "Yang Shen",
+          "Erchin Serpedin",
+          "Chao Tian",
+          "Hamid A. Toliyat",
+          "Zixiang Xiong",
+          "Suin Yi",
+          "Byung-Jun Yoon"
+        ]
+      },
+      "Biomedical Imaging, Sensing and Genomic Signal Processing": {
+        "name": "Biomedical Imaging, Sensing and Genomic Signal Processing",
+        "url": "https://engineering.tamu.edu/electrical/research/biomedical-imaging-sensing-genomic-signal-processing.html",
+        "description": "Biomedical Imaging, Sensing and Genomic Signal Processing",
+        "faculty": [
+          "Raffaella Righetti",
+          "Aniruddha Datta",
+          "Arum Han",
+          "Jim Ji",
+          "Xiaoning Qian",
+          "Erchin Serpedin",
+          "Yang Shen",
+          "Steven M. Wright",
+          "Zixiang Xiong",
+          "Byung-Jun Yoon"
+        ]
+      },
+      "Chip Manufacturing": {
+        "name": "Chip Manufacturing",
+        "url": "https://engineering.tamu.edu/electrical/research/chip-manufacturing.html",
+        "description": "Chip Manufacturing offers research opportunities in the areas of emerging electronic devices and systems beyond Moore's law, logic and memory semiconductors for artificial intelligence, neuromorphic computing devices and systems, wide bandgap semiconductors for electric vehicles and smart grid, radiation-hard and cryogenic semiconductors for space applications, 3D heterogeneous integration for RF ",
+        "faculty": [
+          "Prasad Enjeti",
+          "Jiarui Gong",
+          "Paul Gratz",
+          "Arum Han",
+          "Jiang Hu",
+          "Linda Katehi",
+          "Sunil Khatri",
+          "Milad Koohi",
+          "Suin Yi",
+          "Jun Zou"
+        ]
+      },
+      "Communications and Networks": {
+        "name": "Communications and Networks",
+        "url": "https://engineering.tamu.edu/electrical/research/communications-and-networks.html",
+        "description": "The Communications and Networks research group focuses on advancing the theory, design, and implementation of modern communication systems and networks. Research areas include information and coding theory, Artificial Intelligence (AI)-native next-generation (NextG) communication networks and systems, wireless and optical networking, and edge intelligence for decision-making. The group explores al",
+        "faculty": [
+          "Tie Liu",
+          "Krishna Narayanan",
+          "Narasimha Reddy",
+          "Serap Savari",
+          "Erchin Serpedin",
+          "Srinivas Shakkottai",
+          "Chao Tian",
+          "Zixiang Xiong",
+          "Xi Zhang",
+          "Jean-Francois Chamberland",
+          "Prasad Enjeti",
+          "Costas N. Georghiades",
+          "I-Hong Hou",
+          "Laszlo B. Kish",
+          "P.R. Kumar"
+        ]
+      },
+      "Computer Engineering and Systems": {
+        "name": "Computer Engineering and Systems",
+        "url": "https://engineering.tamu.edu/electrical/research/computer-engineering-systems.html",
+        "description": "Computer Engineering offers research opportunities in the areas of computer communications and networks, data science, multimedia, storage systems, parallel and distributed computing and architecture, fault-tolerant computing and design for testing,",
+        "faculty": [
+          "Kevin Nowka",
+          "Ulisses Braga-Neto",
+          "Jean-Francois Chamberland",
+          "Gwan Choi",
+          "Nick Duffield",
+          "Paul Gratz",
+          "I-Hong Hou",
+          "Jiang Hu",
+          "Stavros Kalafatis",
+          "Dileep Kalathil",
+          "Sunil Khatri",
+          "P.R. Kumar",
+          "Mi Lu",
+          "Varun Murali",
+          "Krishna Narayanan",
+          "Joshua Peeples",
+          "Narasimha Reddy",
+          "Srinivas Shakkottai",
+          "Weiping Shi",
+          "Karan L. Watson",
+          "Stanley Williams",
+          "Suin Yi",
+          "Xi Zhang"
+        ]
+      },
+      "Device Science and Nanotechnology": {
+        "name": "Device Science and Nanotechnology",
+        "url": "https://engineering.tamu.edu/electrical/research/device-science-and-nanotechnology.html",
+        "description": "The Device Science and Nanotechnology program in the Department of Electrical and Computer Engineering at Texas A&M University encompasses a wide range of research topics from electro-optics to quantum computing. The electro-optics program incorporates a range of technologies that use optical and electronic phenomena. Research areas of primary interest include fiber optics, integrated optics, and ",
+        "faculty": [
+          "Jun Zou",
+          "Jiarui Gong",
+          "H. Rusty Harris",
+          "Philip Hemmer",
+          "Linda Katehi",
+          "Laszlo B. Kish",
+          "Milad Koohi",
+          "Pao-Tai Lin",
+          "Peter Rentzepis",
+          "Suin Yi"
+        ]
+      },
+      "Electromagnetics and Microwaves": {
+        "name": "Electromagnetics and Microwaves",
+        "url": "https://engineering.tamu.edu/electrical/research/electromagnetics-microwaves.html",
+        "description": "Research activities in electromagnetics and microwaves span a broad spectrum of applications. This includes the theoretical and experimental aspects of antennas, electromagnetic theory, electromagnetic wave scattering, active and passive microwave and millimeter-wave circuits, linear and non-linear optical or microwave guiding systems, and microstrip antennas.",
+        "faculty": [
+          "Steven M. Wright",
+          "Kamran Entesari",
+          "Marco Iskander",
+          "Linda Katehi",
+          "Milad Koohi",
+          "Arya Menon",
+          "Krzysztof Arkadiusz Michalski",
+          "Robert D. Nevels"
+        ]
+      },
+      "Energy and Power": {
+        "name": "Energy and Power",
+        "url": "https://engineering.tamu.edu/electrical/research/energy-and-power.html",
+        "description": "Faculty expertise from both power systems and power electronics is frequently combined in research activities. Power systems research is performed in the areas of analysis, reliability, monitoring, control, and protection of power systems. Some faculty have a strong interest in control systems, digital signal processing, data communications, and intelligent system applications. Power electronics r",
+        "faculty": [
+          "Thomas Overbye",
+          "Robert S. Balog",
+          "Miroslav M. Begovic",
+          "Adam Birchfield",
+          "Karen L. Butler-Purry",
+          "Xin Chen",
+          "Katherine Davis",
+          "Prasad Enjeti",
+          "Mladen Kezunovic",
+          "Sandip Roy",
+          "B. Don Russell",
+          "Chanan Singh",
+          "Hamid A. Toliyat"
+        ]
+      },
+      "Information Science and Learning Systems": {
+        "name": "Information Science and Learning Systems",
+        "url": "https://engineering.tamu.edu/electrical/research/information-science-and-systems.html",
+        "description": "Research activities in the Information Science and Learning Systems program are focused on advancing the state of the art in areas including information theory, coding theory, data compression, detection and estimation, receiver signal processing, networking coding and network information theory, multimedia security, secrecy systems, optimization techniques, robust control, adaptive control and co",
+        "faculty": [
+          "Chao Tian",
+          "Jean-Francois Chamberland",
+          "Aniruddha Datta",
+          "Zhiwen Fan",
+          "Costas N. Georghiades",
+          "Dileep Kalathil",
+          "P.R. Kumar",
+          "Tie Liu",
+          "Krishna Narayanan",
+          "Joshua Peeples",
+          "Sandip Roy",
+          "Serap Savari",
+          "Erchin Serpedin",
+          "Zixiang Xiong"
+        ]
+      },
+      "Security": {
+        "name": "Security",
+        "url": "https://engineering.tamu.edu/electrical/research/security.html",
+        "description": "Security research includes computer security, cyber-physical security, hardware security, cryptography, secure computing architectures, smart-grid security, privacy-enhancing technologies, risk assessment, and supply-chain security. Researchers innovate methods to protect data, systems, and communications from cyber threats, ensuring critical information's integrity, confidentiality, and availabil",
+        "faculty": [
+          "Prasad Enjeti",
+          "Paul Gratz",
+          "Sunil Khatri",
+          "Laszlo B. Kish",
+          "P.R. Kumar",
+          "Narasimha Reddy",
+          "Erchin Serpedin",
+          "Zixiang Xiong"
+        ]
+      }
+    },
+    "degree_programs": {
+      "Bachelor of Science in Electrical Engineering": {
+        "name": "Bachelor of Science in Electrical Engineering",
+        "level": "undergraduate",
+        "type": "degree",
+        "short": "BS EE"
+      },
+      "Bachelor of Science in Computer Engineering": {
+        "name": "Bachelor of Science in Computer Engineering",
+        "level": "undergraduate",
+        "type": "degree",
+        "short": "BS CE"
+      },
+      "Minor in Electrical Engineering": {
+        "name": "Minor in Electrical Engineering",
+        "level": "undergraduate",
+        "type": "minor",
+        "short": "Minor EE"
+      },
+      "Master of Science in Electrical Engineering": {
+        "name": "Master of Science in Electrical Engineering",
+        "level": "graduate",
+        "type": "degree",
+        "short": "MS EE"
+      },
+      "Master of Science in Computer Engineering": {
+        "name": "Master of Science in Computer Engineering",
+        "level": "graduate",
+        "type": "degree",
+        "short": "MS CE"
+      },
+      "Master of Science in Microelectronics and Semiconductors": {
+        "name": "Master of Science in Microelectronics and Semiconductors",
+        "level": "graduate",
+        "type": "degree",
+        "short": "MS MESC"
+      },
+      "Doctor of Philosophy in Electrical Engineering": {
+        "name": "Doctor of Philosophy in Electrical Engineering",
+        "level": "graduate",
+        "type": "degree",
+        "short": "PhD EE"
+      },
+      "Doctor of Philosophy in Computer Engineering": {
+        "name": "Doctor of Philosophy in Computer Engineering",
+        "level": "graduate",
+        "type": "degree",
+        "short": "PhD CE"
+      },
+      "Online Master of Science in Electrical Engineering": {
+        "name": "Online Master of Science in Electrical Engineering",
+        "level": "graduate",
+        "type": "online",
+        "short": "Online MS EE"
+      },
+      "Online Master of Science in Computer Engineering": {
+        "name": "Online Master of Science in Computer Engineering",
+        "level": "graduate",
+        "type": "online",
+        "short": "Online MS CE"
+      },
+      "Online Doctor of Philosophy in Electrical Engineering": {
+        "name": "Online Doctor of Philosophy in Electrical Engineering",
+        "level": "graduate",
+        "type": "online",
+        "short": "Online PhD EE"
+      },
+      "Online Doctor of Philosophy in Computer Engineering": {
+        "name": "Online Doctor of Philosophy in Computer Engineering",
+        "level": "graduate",
+        "type": "online",
+        "short": "Online PhD CE"
+      },
+      "Analog and Mixed-Signal Integrated Circuit Design Certificate": {
+        "name": "Analog and Mixed-Signal Integrated Circuit Design Certificate",
+        "level": "graduate",
+        "type": "certificate",
+        "short": "Analog IC Cert"
+      },
+      "Digital Integrated Circuit Design Certificate": {
+        "name": "Digital Integrated Circuit Design Certificate",
+        "level": "graduate",
+        "type": "certificate",
+        "short": "Digital IC Cert"
+      },
+      "Electromagnetic Fields and Microwave Circuit Design Certificate": {
+        "name": "Electromagnetic Fields and Microwave Circuit Design Certificate",
+        "level": "graduate",
+        "type": "certificate",
+        "short": "EM Cert"
+      },
+      "Semiconductor Manufacturing Certificate": {
+        "name": "Semiconductor Manufacturing Certificate",
+        "level": "graduate",
+        "type": "certificate",
+        "short": "Semiconductor Cert"
+      }
+    },
+    "research_centers": {}
+  },
+  "edges": {
+    "faculty_member_of": [
+      {
+        "faculty": "Kamran Entesari",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Sebastian Hoyos",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Aydin Karsilayan",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Oscar Moreira",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Sam Palermo",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Milad Koohi",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Ulisses Braga-Neto",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Prasad Enjeti",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Costas N. Georghiades",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "I-Hong Hou",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Jiang Hu",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Dileep Kalathil",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Sunil Khatri",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Sunil Khatri",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Joshua Peeples",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Xiaoning Qian",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "B. Don Russell",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Srinivas Shakkottai",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Yang Shen",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Erchin Serpedin",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Chao Tian",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Hamid A. Toliyat",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Zixiang Xiong",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Tie Liu",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Krishna Narayanan",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Narasimha Reddy",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Serap Savari",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Erchin Serpedin",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Srinivas Shakkottai",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Chao Tian",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Zixiang Xiong",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Xi Zhang",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Ulisses Braga-Neto",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Jean-Francois Chamberland",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Gwan Choi",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Nick Duffield",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Paul Gratz",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "I-Hong Hou",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Jiang Hu",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "I-Hong Hou",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Jiang Hu",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Stavros Kalafatis",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Dileep Kalathil",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Sunil Khatri",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "P.R. Kumar",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Mi Lu",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Varun Murali",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Krishna Narayanan",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Joshua Peeples",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Narasimha Reddy",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Srinivas Shakkottai",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Weiping Shi",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Karan L. Watson",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Jiarui Gong",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "H. Rusty Harris",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Philip Hemmer",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Linda Katehi",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Laszlo B. Kish",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Milad Koohi",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Pao-Tai Lin",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Pao-Tai Lin",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Peter Rentzepis",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Suin Yi",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Chao Tian",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Hamid A. Toliyat",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Zixiang Xiong",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Suin Yi",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Byung-Jun Yoon",
+        "research_area": "Artificial Intelligence and Machine Learning"
+      },
+      {
+        "faculty": "Karan L. Watson",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Stanley Williams",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Suin Yi",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Xi Zhang",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Aniruddha Datta",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Arum Han",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Jim Ji",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Xiaoning Qian",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Erchin Serpedin",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Yang Shen",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Steven M. Wright",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Yang Shen",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Steven M. Wright",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Zixiang Xiong",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Byung-Jun Yoon",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Prasad Enjeti",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Jiarui Gong",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Paul Gratz",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Arum Han",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Jiang Hu",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Linda Katehi",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Sunil Khatri",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Milad Koohi",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Sunil Khatri",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Milad Koohi",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Suin Yi",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Jun Zou",
+        "research_area": "Chip Manufacturing"
+      },
+      {
+        "faculty": "Jean-Francois Chamberland",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Prasad Enjeti",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Costas N. Georghiades",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "I-Hong Hou",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Laszlo B. Kish",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "P.R. Kumar",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Tie Liu",
+        "research_area": "Communications and Networks"
+      },
+      {
+        "faculty": "Kamran Entesari",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Marco Iskander",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Linda Katehi",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Milad Koohi",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Arya Menon",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Krzysztof Arkadiusz Michalski",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Robert D. Nevels",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Robert S. Balog",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Miroslav M. Begovic",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Adam Birchfield",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Karen L. Butler-Purry",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Xin Chen",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Katherine Davis",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Katherine Davis",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Prasad Enjeti",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Mladen Kezunovic",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Sandip Roy",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "B. Don Russell",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Chanan Singh",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Hamid A. Toliyat",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Jean-Francois Chamberland",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Aniruddha Datta",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Zhiwen Fan",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Costas N. Georghiades",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Dileep Kalathil",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "P.R. Kumar",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Tie Liu",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Tie Liu",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Krishna Narayanan",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Joshua Peeples",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Sandip Roy",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Serap Savari",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Erchin Serpedin",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Zixiang Xiong",
+        "research_area": "Information Science and Learning Systems"
+      },
+      {
+        "faculty": "Prasad Enjeti",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "Paul Gratz",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "Sunil Khatri",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "Laszlo B. Kish",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "P.R. Kumar",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "Narasimha Reddy",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "Erchin Serpedin",
+        "research_area": "Security"
+      },
+      {
+        "faculty": "Zixiang Xiong",
+        "research_area": "Security"
+      }
+    ],
+    "faculty_group_leader": [
+      {
+        "faculty": "Jose Silva-Martinez",
+        "research_area": "Analog and Mixed Signals"
+      },
+      {
+        "faculty": "Kevin Nowka",
+        "research_area": "Computer Engineering and Systems"
+      },
+      {
+        "faculty": "Jun Zou",
+        "research_area": "Device Science and Nanotechnology"
+      },
+      {
+        "faculty": "Raffaella Righetti",
+        "research_area": "Biomedical Imaging, Sensing and Genomic Signal Processing"
+      },
+      {
+        "faculty": "Steven M. Wright",
+        "research_area": "Electromagnetics and Microwaves"
+      },
+      {
+        "faculty": "Thomas Overbye",
+        "research_area": "Energy and Power"
+      },
+      {
+        "faculty": "Chao Tian",
+        "research_area": "Information Science and Learning Systems"
+      }
+    ],
+    "degree_level": [
+      {
+        "degree": "Bachelor of Science in Electrical Engineering",
+        "level": "undergraduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Bachelor of Science in Computer Engineering",
+        "level": "undergraduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Minor in Electrical Engineering",
+        "level": "undergraduate",
+        "type": "minor"
+      },
+      {
+        "degree": "Master of Science in Electrical Engineering",
+        "level": "graduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Master of Science in Computer Engineering",
+        "level": "graduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Master of Science in Microelectronics and Semiconductors",
+        "level": "graduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Doctor of Philosophy in Electrical Engineering",
+        "level": "graduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Doctor of Philosophy in Computer Engineering",
+        "level": "graduate",
+        "type": "degree"
+      },
+      {
+        "degree": "Online Master of Science in Electrical Engineering",
+        "level": "graduate",
+        "type": "online"
+      },
+      {
+        "degree": "Online Master of Science in Computer Engineering",
+        "level": "graduate",
+        "type": "online"
+      },
+      {
+        "degree": "Online Doctor of Philosophy in Electrical Engineering",
+        "level": "graduate",
+        "type": "online"
+      },
+      {
+        "degree": "Online Doctor of Philosophy in Computer Engineering",
+        "level": "graduate",
+        "type": "online"
+      },
+      {
+        "degree": "Analog and Mixed-Signal Integrated Circuit Design Certificate",
+        "level": "graduate",
+        "type": "certificate"
+      },
+      {
+        "degree": "Digital Integrated Circuit Design Certificate",
+        "level": "graduate",
+        "type": "certificate"
+      },
+      {
+        "degree": "Electromagnetic Fields and Microwave Circuit Design Certificate",
+        "level": "graduate",
+        "type": "certificate"
+      },
+      {
+        "degree": "Semiconductor Manufacturing Certificate",
+        "level": "graduate",
+        "type": "certificate"
+      }
+    ]
+  }
+}

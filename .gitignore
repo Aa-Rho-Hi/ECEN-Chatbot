@@ -1,0 +1,59 @@
+# ───────────── Secrets / environment ─────────────
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# ───────────── Python ─────────────
+__pycache__/
+*.py[cod]
+*$py.class
+.venv/
+venv/
+env/
+.python-version
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ───────────── Node / Next.js ─────────────
+node_modules/
+.next/
+out/
+.turbo/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# ───────────── Fine-tuned model weights / large artifacts ─────────────
+finetune/tamu-ece-embedder/
+finetune/**/checkpoint-*/
+*.safetensors
+*.bin
+*.pt
+*.pth
+*.onnx
+*.ckpt
+
+# ───────────── Crawl caches / data dumps ─────────────
+crawler/.cache/
+crawler/raw/
+*.sqlite
+*.db
+
+# ───────────── Backups / scratch ─────────────
+*.bak
+graph.json.*.bak
+graph.json.new
+*.bak2
+*.tmp
+
+# ───────────── OS / editor ─────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

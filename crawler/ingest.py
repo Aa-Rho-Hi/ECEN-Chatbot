@@ -1,0 +1,157 @@
+"""
+ingest.py — Embeds chunks and upserts them into PostgreSQL (pgvector).
+
+Run:
+    python ingest.py            # full crawl + ingest
+    python ingest.py --diff     # only update changed/new pages
+"""
+
+from __future__ import annotations
+
+import argparse
+import logging
+import os
+import hashlib
+from datetime import datetime, timezone
+
+import psycopg2
+from pgvector.psycopg2 import register_vector
+from dotenv import load_dotenv
+from sentence_transformers import SentenceTransformer
+from tqdm import tqdm
+
+from crawler import crawl
+from chunker import chunk_docs, Chunk
+
+load_dotenv(override=True)
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
+log = logging.getLogger(__name__)
+
+# ── Config ──────────────────────────────────────────────────────────────────
+PG_DSN = os.getenv("PG_DSN", "postgresql://postgres:postgres@localhost:5433/ecen")
+EMBED_MODEL = os.getenv("EMBEDDING_MODEL", "all-MiniLM-L6-v2")
+VECTOR_DIM = 384
+BATCH_SIZE = 64
+
+
+# ── DB connection ─────────────────────────────────────────────────────────────
+def get_conn():
+    conn = psycopg2.connect(PG_DSN)
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+    conn.commit()
+    register_vector(conn)
+    return conn
+
+
+def get_embedder() -> SentenceTransformer:
+    log.info(f"Loading local embedding model '{EMBED_MODEL}'...")
+    return SentenceTransformer(EMBED_MODEL)
+
+
+# ── Schema setup ─────────────────────────────────────────────────────────────
+def ensure_table(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+        cur.execute(f"""
+            CREATE TABLE IF NOT EXISTS ecen_docs (
+                id          BIGINT PRIMARY KEY,
+                chunk_id    TEXT UNIQUE NOT NULL,
+                url         TEXT NOT NULL,
+                title       TEXT,
+                section     TEXT,
+                text        TEXT NOT NULL,
+                content_hash TEXT NOT NULL,
+                last_indexed TIMESTAMPTZ NOT NULL,
+                embedding   vector({VECTOR_DIM})
+            );
+        """)
+        # HNSW index for fast ANN search
+        cur.execute("""
+            CREATE INDEX IF NOT EXISTS ecen_docs_embedding_idx
+            ON ecen_docs USING hnsw (embedding vector_cosine_ops);
+        """)
+        cur.execute("CREATE INDEX IF NOT EXISTS ecen_docs_url_idx ON ecen_docs (url);")
+        cur.execute("CREATE INDEX IF NOT EXISTS ecen_docs_section_idx ON ecen_docs (section);")
+    conn.commit()
+    log.info("Table and indexes ready.")
+
+
+# ── Embedding ────────────────────────────────────────────────────────────────
+def embed_texts(embedder: SentenceTransformer, texts: list[str]) -> list[list[float]]:
+    all_vectors = []
+    for i in tqdm(range(0, len(texts), BATCH_SIZE), desc="Embedding batches"):
+        batch = texts[i: i + BATCH_SIZE]
+        vecs = embedder.encode(batch, normalize_embeddings=True)
+        all_vectors.extend(vecs.tolist())
+    return all_vectors
+
+
+# ── Diff logic ───────────────────────────────────────────────────────────────
+def get_existing_hashes(conn) -> dict[str, str]:
+    """Returns {chunk_id: content_hash} for all stored chunks."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT chunk_id, content_hash FROM ecen_docs;")
+        return {row[0]: row[1] for row in cur.fetchall()}
+
+
+# ── Main ingest ───────────────────────────────────────────────────────────────
+def ingest(diff_mode: bool = False) -> None:
+    conn = get_conn()
+    embedder = get_embedder()
+    ensure_table(conn)
+
+    log.info("Starting crawl...")
+    pages = crawl()
+    log.info(f"Crawled {len(pages)} pages. Chunking...")
+    chunks = chunk_docs(pages)
+    log.info(f"Produced {len(chunks)} chunks.")
+
+    if diff_mode:
+        existing = get_existing_hashes(conn)
+        chunks = [c for c in chunks if existing.get(c.chunk_id) != c.content_hash]
+        log.info(f"Diff mode: {len(chunks)} new/changed chunks to upsert.")
+
+    if not chunks:
+        log.info("Nothing to upsert.")
+        conn.close()
+        return
+
+    texts = [c.text for c in chunks]
+    log.info(f"Embedding {len(texts)} chunks...")
+    vectors = embed_texts(embedder, texts)
+
+    now = datetime.now(timezone.utc)
+
+    log.info(f"Upserting {len(chunks)} chunks into PostgreSQL...")
+    with conn.cursor() as cur:
+        for i in tqdm(range(0, len(chunks), BATCH_SIZE), desc="Upserting"):
+            batch_chunks = chunks[i: i + BATCH_SIZE]
+            batch_vecs = vectors[i: i + BATCH_SIZE]
+            for c, vec in zip(batch_chunks, batch_vecs):
+                row_id = int(hashlib.md5(c.chunk_id.encode()).hexdigest(), 16) % (2**63)
+                cur.execute("""
+                    INSERT INTO ecen_docs
+                        (id, chunk_id, url, title, section, text, content_hash, last_indexed, embedding)
+                    VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (chunk_id) DO UPDATE SET
+                        url          = EXCLUDED.url,
+                        title        = EXCLUDED.title,
+                        section      = EXCLUDED.section,
+                        text         = EXCLUDED.text,
+                        content_hash = EXCLUDED.content_hash,
+                        last_indexed = EXCLUDED.last_indexed,
+                        embedding    = EXCLUDED.embedding;
+                """, (row_id, c.chunk_id, c.url, c.title, c.section,
+                      c.text, c.content_hash, now, vec))
+    conn.commit()
+    conn.close()
+    log.info("Ingest complete.")
+
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--diff", action="store_true", help="Only upsert new/changed chunks")
+    args = parser.parse_args()
+    ingest(diff_mode=args.diff)

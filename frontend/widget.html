@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TAMU ECE Chat Widget — Preview</title>
+  <style>
+    body { font-family: sans-serif; background: #f4f4f4; margin: 0; padding: 40px; }
+    .notice { background: #500000; color: white; padding: 16px 24px; border-radius: 8px; margin-bottom: 24px; font-size: 14px; }
+    .notice code { background: rgba(255,255,255,0.2); padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <div class="notice">
+    Preview page. The chat widget appears in the bottom-right corner.<br>
+    To embed on any site, add: <code>&lt;script src="https://your-domain.com/ecen-chat-widget.js"&gt;&lt;/script&gt;</code>
+  </div>
+
+  <!-- ── WIDGET SCRIPT (self-contained, paste anywhere) ── -->
+  <script>
+  (function () {
+    const BACKEND = "http://localhost:8000";
+    const MAROON = "#500000";
+
+    // ── Styles ──────────────────────────────────────────
+    const css = `
+      #ecen-chat-fab {
+        position: fixed; bottom: 28px; right: 28px; z-index: 9999;
+        width: 56px; height: 56px; border-radius: 50%;
+        background: ${MAROON}; border: none; cursor: pointer;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.25);
+        display: flex; align-items: center; justify-content: center;
+        transition: transform 0.2s;
+      }
+      #ecen-chat-fab:hover { transform: scale(1.08); }
+      #ecen-chat-fab svg { width: 26px; height: 26px; fill: white; }
+
+      #ecen-chat-box {
+        position: fixed; bottom: 96px; right: 28px; z-index: 9999;
+        width: 380px; height: 560px; border-radius: 16px;
+        background: #fff; box-shadow: 0 8px 40px rgba(0,0,0,0.18);
+        display: flex; flex-direction: column; overflow: hidden;
+        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+        font-size: 14px; opacity: 0; pointer-events: none;
+        transform: translateY(16px);
+        transition: opacity 0.2s, transform 0.2s;
+      }
+      #ecen-chat-box.open { opacity: 1; pointer-events: all; transform: translateY(0); }
+
+      .ecen-header {
+        background: ${MAROON}; color: white;
+        padding: 14px 16px; display: flex; align-items: center; gap: 10px;
+        flex-shrink: 0;
+      }
+      .ecen-header-avatar {
+        width: 32px; height: 32px; border-radius: 50%;
+        background: rgba(255,255,255,0.2);
+        display: flex; align-items: center; justify-content: center; flex-shrink: 0;
+      }
+      .ecen-header-avatar svg { width: 18px; height: 18px; fill: white; }
+      .ecen-header-title { font-weight: 600; font-size: 15px; }
+      .ecen-header-sub { font-size: 11px; opacity: 0.75; }
+      .ecen-close {
+        margin-left: auto; background: none; border: none;
+        color: white; cursor: pointer; opacity: 0.8; padding: 4px;
+        font-size: 20px; line-height: 1;
+      }
+      .ecen-close:hover { opacity: 1; }
+
+      .ecen-filter-bar {
+        padding: 8px 12px; background: #fafafa; border-bottom: 1px solid #eee;
+        display: flex; gap: 6px; overflow-x: auto; flex-shrink: 0;
+        scrollbar-width: none;
+      }
+      .ecen-filter-bar::-webkit-scrollbar { display: none; }
+      .ecen-filter-btn {
+        padding: 4px 10px; border-radius: 20px; border: 1px solid #ddd;
+        background: white; font-size: 11px; cursor: pointer; white-space: nowrap;
+        color: #555; transition: all 0.15s;
+      }
+      .ecen-filter-btn.active { background: ${MAROON}; border-color: ${MAROON}; color: white; }
+
+      .ecen-messages {
+        flex: 1; overflow-y: auto; padding: 16px 12px;
+        display: flex; flex-direction: column; gap: 12px;
+        scrollbar-width: thin; scrollbar-color: #ddd transparent;
+      }
+
+      .ecen-msg { display: flex; gap: 8px; align-items: flex-start; }
+      .ecen-msg.user { flex-direction: row-reverse; }
+
+      .ecen-avatar {
+        width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0;
+        display: flex; align-items: center; justify-content: center; margin-top: 2px;
+      }
+      .ecen-avatar.bot { background: ${MAROON}; }
+      .ecen-avatar.user { background: #e0e0e0; }
+      .ecen-avatar svg { width: 14px; height: 14px; fill: white; }
+      .ecen-avatar.user svg { fill: #666; }
+
+      .ecen-bubble {
+        max-width: 78%; padding: 10px 13px; border-radius: 16px;
+        line-height: 1.5; white-space: pre-wrap; word-break: break-word;
+      }
+      .ecen-msg.bot .ecen-bubble {
+        background: #f0f0f0; color: #1a1a1a; border-top-left-radius: 4px;
+      }
+      .ecen-msg.user .ecen-bubble {
+        background: ${MAROON}; color: white; border-top-right-radius: 4px;
+      }
+
+      .ecen-msg-body { display: flex; flex-direction: column; max-width: 78%; }
+      .ecen-msg.user .ecen-msg-body { align-items: flex-end; }
+
+      .ecen-sources { margin-top: 8px; display: flex; flex-direction: column; gap: 4px; }
+      .ecen-sources-label { font-size: 10px; color: #999; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 2px; }
+      .ecen-source {
+        display: flex; align-items: center; gap: 6px;
+        background: white; border: 1px solid #e8e8e8; border-radius: 8px;
+        padding: 6px 10px; text-decoration: none; color: #555;
+        font-size: 11px; transition: background 0.15s; line-height: 1.3;
+      }
+      .ecen-source:hover { background: #f5f5f5; color: #333; }
+      .ecen-source-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+      .ecen-typing { display: flex; gap: 4px; align-items: center; padding: 10px 13px; }
+      .ecen-typing span {
+        width: 7px; height: 7px; border-radius: 50%; background: #aaa;
+        animation: ecen-bounce 1.2s infinite;
+      }
+      .ecen-typing span:nth-child(2) { animation-delay: 0.2s; }
+      .ecen-typing span:nth-child(3) { animation-delay: 0.4s; }
+      @keyframes ecen-bounce {
+        0%, 80%, 100% { transform: translateY(0); }
+        40% { transform: translateY(-6px); }
+      }
+
+      .ecen-input-row {
+        padding: 10px 12px; border-top: 1px solid #eee;
+        display: flex; gap: 8px; flex-shrink: 0; background: white;
+      }
+      .ecen-input {
+        flex: 1; border: 1px solid #ddd; border-radius: 20px;
+        padding: 9px 14px; font-size: 13px; outline: none;
+        font-family: inherit; resize: none;
+        transition: border-color 0.15s;
+      }
+      .ecen-input:focus { border-color: ${MAROON}; }
+      .ecen-send {
+        width: 36px; height: 36px; border-radius: 50%; border: none;
+        background: ${MAROON}; color: white; cursor: pointer;
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; transition: opacity 0.15s;
+      }
+      .ecen-send:disabled { opacity: 0.4; cursor: not-allowed; }
+      .ecen-send svg { width: 16px; height: 16px; fill: white; }
+
+      .ecen-powered {
+        text-align: center; font-size: 10px; color: #bbb; padding: 4px 0 8px;
+        flex-shrink: 0;
+      }
+    `;
+
+    const SECTION_COLORS = {
+      people: "#7c3aed", research: "#2563eb", academics: "#16a34a",
+      admissions: "#d97706", news: "#dc2626", events: "#ea580c", about: "#6b7280"
+    };
+
+    const FILTERS = [
+      { label: "All", value: "" },
+      { label: "Faculty", value: "people" },
+      { label: "Research", value: "research" },
+      { label: "Academics", value: "academics" },
+      { label: "Admissions", value: "admissions" },
+      { label: "News", value: "news" },
+    ];
+
+    const BOT_ICON = `<svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 0 1 2 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 0 1 7 7H3a7 7 0 0 1 7-7h1V5.73A2 2 0 0 1 10 4a2 2 0 0 1 2-2M7 14a1 1 0 1 0 0 2 1 1 0 0 0 0-2m10 0a1 1 0 1 0 0 2 1 1 0 0 0 0-2M3 21v-1a7 7 0 0 1 7-7h4a7 7 0 0 1 7 7v1H3z"/></svg>`;
+    const USER_ICON = `<svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+    const SEND_ICON = `<svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>`;
+    const CLOSE_ICON = "✕";
+
+    // ── Build DOM ───────────────────────────────────────
+    const style = document.createElement("style");
+    style.textContent = css;
+    document.head.appendChild(style);
+
+    // FAB button
+    const fab = document.createElement("button");
+    fab.id = "ecen-chat-fab";
+    fab.innerHTML = BOT_ICON;
+    fab.title = "Ask TAMU ECE Assistant";
+    document.body.appendChild(fab);
+
+    // Chat box
+    const box = document.createElement("div");
+    box.id = "ecen-chat-box";
+    box.innerHTML = `
+      <div class="ecen-header">
+        <div class="ecen-header-avatar">${BOT_ICON}</div>
+        <div>
+          <div class="ecen-header-title">TAMU ECE Assistant</div>
+          <div class="ecen-header-sub">Ask about faculty, research, programs &amp; more</div>
+        </div>
+        <button class="ecen-close" id="ecen-close-btn">${CLOSE_ICON}</button>
+      </div>
+      <div class="ecen-filter-bar" id="ecen-filters"></div>
+      <div class="ecen-messages" id="ecen-messages"></div>
+      <div class="ecen-input-row">
+        <input class="ecen-input" id="ecen-input" placeholder="Ask a question..." />
+        <button class="ecen-send" id="ecen-send" disabled>${SEND_ICON}</button>
+      </div>
+      <div class="ecen-powered">Powered by TAMU ECE RAG · <a href="https://engineering.tamu.edu/electrical" target="_blank" style="color:#bbb">Visit Department</a></div>
+    `;
+    document.body.appendChild(box);
+
+    // Build filter buttons
+    const filterBar = document.getElementById("ecen-filters");
+    let activeFilter = "";
+    FILTERS.forEach(f => {
+      const btn = document.createElement("button");
+      btn.className = "ecen-filter-btn" + (f.value === "" ? " active" : "");
+      btn.textContent = f.label;
+      btn.onclick = () => {
+        activeFilter = f.value;
+        filterBar.querySelectorAll(".ecen-filter-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+      };
+      filterBar.appendChild(btn);
+    });
+
+    // ── State ───────────────────────────────────────────
+    const msgContainer = document.getElementById("ecen-messages");
+    const input = document.getElementById("ecen-input");
+    const sendBtn = document.getElementById("ecen-send");
+    let isStreaming = false;
+
+    // Welcome message
+    addBotMessage("Hi! I'm the TAMU ECE assistant. Ask me anything about the department — faculty, research, programs, admissions, and more.");
+
+    // ── Toggle open/close ────────────────────────────────
+    fab.onclick = () => box.classList.toggle("open");
+    document.getElementById("ecen-close-btn").onclick = () => box.classList.remove("open");
+
+    // ── Input handling ───────────────────────────────────
+    input.oninput = () => { sendBtn.disabled = !input.value.trim() || isStreaming; };
+    input.onkeydown = (e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } };
+    sendBtn.onclick = send;
+
+    function addBotMessage(text, sources) {
+      const msg = document.createElement("div");
+      msg.className = "ecen-msg bot";
+      msg.innerHTML = `
+        <div class="ecen-avatar bot">${BOT_ICON}</div>
+        <div class="ecen-msg-body">
+          <div class="ecen-bubble">${escHtml(text)}</div>
+          ${sources && sources.length ? renderSources(sources) : ""}
+        </div>`;
+      msgContainer.appendChild(msg);
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+      return msg;
+    }
+
+    function addUserMessage(text) {
+      const msg = document.createElement("div");
+      msg.className = "ecen-msg user";
+      msg.innerHTML = `
+        <div class="ecen-avatar user">${USER_ICON}</div>
+        <div><div class="ecen-bubble">${escHtml(text)}</div></div>`;
+      msgContainer.appendChild(msg);
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+    }
+
+    function addTyping() {
+      const msg = document.createElement("div");
+      msg.className = "ecen-msg bot";
+      msg.id = "ecen-typing";
+      msg.innerHTML = `<div class="ecen-avatar bot">${BOT_ICON}</div><div class="ecen-bubble ecen-typing"><span></span><span></span><span></span></div>`;
+      msgContainer.appendChild(msg);
+      msgContainer.scrollTop = msgContainer.scrollHeight;
+      return msg;
+    }
+
+    function renderSources(sources) {
+      return `<div class="ecen-sources"><div class="ecen-sources-label">Sources</div>${sources.slice(0, 3).map(s => `
+        <a class="ecen-source" href="${s.url}" target="_blank">
+          <span class="ecen-source-dot" style="background:${SECTION_COLORS[s.section] || '#999'}"></span>
+          <span>${escHtml(s.title.replace(" | Texas A&M University Engineering", "").replace(" - Engineering News","").slice(0, 55))}</span>
+          <svg style="margin-left:auto;flex-shrink:0;opacity:0.4" viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M19 19H5V5h7V3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7h-2v7zM14 3v2h3.59l-9.83 9.83 1.41 1.41L19 6.41V10h2V3h-7z"/></svg>
+        </a>`).join("")}</div>`;
+    }
+
+    function escHtml(t) {
+      return t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    }
+
+    async function send() {
+      const q = input.value.trim();
+      if (!q || isStreaming) return;
+      input.value = "";
+      sendBtn.disabled = true;
+      isStreaming = true;
+
+      addUserMessage(q);
+      const typing = addTyping();
+
+      try {
+        const res = await fetch(`${BACKEND}/chat`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ question: q, section_filter: activeFilter || undefined }),
+        });
+
+        if (!res.ok) {
+          const errText = await res.text();
+          throw new Error(`HTTP ${res.status}: ${errText}`);
+        }
+        if (!res.body) throw new Error("No response body");
+
+        // Replace typing with streaming bubble
+        typing.remove();
+        const botDiv = document.createElement("div");
+        botDiv.className = "ecen-msg bot";
+        botDiv.innerHTML = `<div class="ecen-avatar bot">${BOT_ICON}</div><div class="ecen-msg-body"><div class="ecen-bubble"></div></div>`;
+        msgContainer.appendChild(botDiv);
+        const bubble = botDiv.querySelector(".ecen-bubble");
+        const msgBody = botDiv.querySelector(".ecen-msg-body");
+
+        const reader = res.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = "";
+        let answer = "";
+        let sources = [];
+        let isSourcesEvent = false;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
+
+          for (const line of lines) {
+            if (line.startsWith("event:")) {
+              isSourcesEvent = line.includes("sources");
+              continue;
+            }
+            if (!line.startsWith("data:")) continue;
+            const data = line.slice(5); // keep leading space as part of token
+            const trimmed = data.trim();
+            if (trimmed === "[DONE]") continue;
+
+            if (isSourcesEvent) {
+              isSourcesEvent = false;
+              try { sources = JSON.parse(trimmed); } catch {}
+              continue;
+            }
+
+            // Check if it's a JSON array (sources without event prefix)
+            if (trimmed.startsWith("[")) {
+              try {
+                const parsed = JSON.parse(trimmed);
+                if (Array.isArray(parsed)) { sources = parsed; continue; }
+              } catch {}
+            }
+
+            // It's an answer token — keep as-is (preserve spaces)
+            answer += data.startsWith(" ") ? data.slice(1) : data;
+            bubble.textContent = answer;
+            msgContainer.scrollTop = msgContainer.scrollHeight;
+          }
+        }
+
+        // Append sources below the answer
+        if (sources.length) {
+          const srcDiv = document.createElement("div");
+          srcDiv.innerHTML = renderSources(sources);
+          msgBody.appendChild(srcDiv.firstChild);
+        }
+
+      } catch (err) {
+        typing.remove();
+        addBotMessage("Error: " + (err.message || "Could not reach the backend. Make sure it's running on port 8000."));
+      } finally {
+        isStreaming = false;
+        sendBtn.disabled = !input.value.trim();
+      }
+    }
+  })();
+  </script>
+</body>
+</html>

@@ -1,0 +1,537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>TAMU ECE Assistant</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #fff;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+    }
+
+    /* ══════════════════════════════════════
+       LANDING STATE
+    ══════════════════════════════════════ */
+    #landing {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      width: 100%;
+      max-width: 680px;
+      padding: 0 24px;
+      gap: 32px;
+      transition: opacity 0.3s;
+    }
+
+    #landing h1 {
+      font-size: 36px;
+      font-weight: 600;
+      color: #500000;
+      text-align: center;
+      letter-spacing: -0.5px;
+    }
+
+    .landing-input-wrap {
+      width: 100%;
+      background: #f5f5f5;
+      border-radius: 32px;
+      display: flex;
+      align-items: center;
+      padding: 8px 8px 8px 20px;
+      gap: 10px;
+      border: 1.5px solid #e0e0e0;
+    }
+
+    .landing-input-wrap textarea {
+      flex: 1;
+      background: transparent;
+      border: none;
+      outline: none;
+      color: #111;
+      font-size: 15px;
+      font-family: inherit;
+      resize: none;
+      line-height: 1.5;
+      max-height: 120px;
+      overflow-y: auto;
+      padding: 6px 0;
+    }
+    .landing-input-wrap textarea::placeholder { color: #aaa; }
+
+    .landing-send-btn {
+      width: 40px; height: 40px;
+      border-radius: 50%;
+      background: #500000;
+      border: none;
+      cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+      transition: background 0.15s, opacity 0.15s;
+    }
+    .landing-send-btn:hover { background: #6a0000; }
+    .landing-send-btn:disabled { opacity: 0.25; cursor: not-allowed; }
+    .landing-send-btn svg { width: 16px; height: 16px; fill: #fff; margin-left: 2px; }
+
+    .landing-chips {
+      display: flex;
+      gap: 10px;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+    .chip {
+      display: flex; align-items: center; gap: 8px;
+      background: #fff;
+      border: 1.5px solid #e0e0e0;
+      border-radius: 20px;
+      padding: 10px 16px;
+      color: #500000;
+      font-size: 13px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s, border-color 0.15s;
+    }
+    .chip:hover { background: #fff5f5; border-color: #500000; }
+    .chip-icon { font-size: 15px; }
+
+    /* ══════════════════════════════════════
+       CHAT STATE
+    ══════════════════════════════════════ */
+    #chatView {
+      display: none;
+      flex-direction: column;
+      width: 100%;
+      max-width: 780px;
+      height: 100vh;
+      background: #fff;
+    }
+
+    /* Header */
+    .chat-header {
+      background: #500000;
+      color: white;
+      padding: 14px 20px;
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      flex-shrink: 0;
+    }
+    .chat-header-icon {
+      width: 36px; height: 36px;
+      background: rgba(255,255,255,0.15);
+      border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0;
+    }
+    .chat-header-icon svg { width: 18px; height: 18px; fill: white; }
+    .chat-header h1 { font-size: 16px; font-weight: 700; }
+    .chat-header p { font-size: 11px; opacity: 0.7; margin-top: 1px; }
+    .header-badge {
+      margin-left: auto;
+      background: rgba(255,255,255,0.15);
+      border-radius: 20px;
+      padding: 3px 10px;
+      font-size: 11px;
+      white-space: nowrap;
+    }
+
+    /* Filter bar */
+    .filter-bar {
+      padding: 8px 14px;
+      background: #fafafa;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      gap: 6px;
+      overflow-x: auto;
+      flex-shrink: 0;
+      scrollbar-width: none;
+    }
+    .filter-bar::-webkit-scrollbar { display: none; }
+    .filter-btn {
+      padding: 4px 12px;
+      border-radius: 20px;
+      border: 1.5px solid #ddd;
+      background: white;
+      font-size: 12px;
+      cursor: pointer;
+      white-space: nowrap;
+      color: #555;
+      font-family: inherit;
+      transition: all 0.15s;
+    }
+    .filter-btn:hover { border-color: #500000; color: #500000; }
+    .filter-btn.active { background: #500000; border-color: #500000; color: white; }
+
+    /* Messages */
+    .messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 20px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+      scroll-behavior: smooth;
+    }
+
+    .msg { display: flex; gap: 10px; align-items: flex-start; }
+    .msg.user { flex-direction: row-reverse; }
+
+    .avatar {
+      width: 32px; height: 32px; border-radius: 50%;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; margin-top: 2px;
+    }
+    .avatar.bot { background: #500000; }
+    .avatar.user { background: #ddd; }
+    .avatar svg { width: 15px; height: 15px; fill: white; }
+    .avatar.user svg { fill: #666; }
+
+    .msg-body { display: flex; flex-direction: column; max-width: 74%; }
+    .msg.user .msg-body { align-items: flex-end; }
+
+    .bubble {
+      padding: 11px 15px;
+      border-radius: 18px;
+      line-height: 1.6;
+      font-size: 14px;
+      white-space: pre-wrap;
+      word-break: break-word;
+    }
+    .msg.bot .bubble { background: #f2f2f2; color: #1a1a1a; border-top-left-radius: 4px; }
+    .msg.user .bubble { background: #500000; color: white; border-top-right-radius: 4px; }
+
+    /* Sources */
+    .sources { margin-top: 8px; display: flex; flex-direction: column; gap: 5px; }
+    .sources-label { font-size: 10px; color: #999; font-weight: 700; text-transform: uppercase; letter-spacing: 0.6px; margin-bottom: 2px; }
+    .source-link {
+      display: flex; align-items: center; gap: 8px;
+      background: white; border: 1px solid #e5e5e5; border-radius: 10px;
+      padding: 7px 11px; text-decoration: none; color: #444;
+      font-size: 12px; transition: all 0.15s; line-height: 1.3;
+    }
+    .source-link:hover { background: #f8f8f8; border-color: #ccc; color: #222; }
+    .source-dot { width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0; }
+    .source-text { flex: 1; }
+    .source-tag { font-size: 10px; padding: 2px 7px; border-radius: 10px; font-weight: 600; flex-shrink: 0; }
+
+    /* Typing */
+    .typing-dots { display: flex; gap: 5px; align-items: center; padding: 4px 2px; }
+    .typing-dots span { width: 7px; height: 7px; border-radius: 50%; background: #bbb; animation: bounce 1.3s infinite; }
+    .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); opacity: 0.5; }
+      40% { transform: translateY(-7px); opacity: 1; }
+    }
+
+    /* Input area */
+    .input-area {
+      border-top: 1px solid #eee;
+      padding: 12px 16px;
+      background: white;
+      flex-shrink: 0;
+    }
+    .input-row { display: flex; gap: 10px; align-items: flex-end; }
+    .input-box {
+      flex: 1;
+      border: 1.5px solid #ddd;
+      border-radius: 24px;
+      padding: 10px 16px;
+      font-size: 14px;
+      font-family: inherit;
+      outline: none;
+      resize: none;
+      line-height: 1.4;
+      max-height: 120px;
+      overflow-y: auto;
+      transition: border-color 0.2s;
+    }
+    .input-box:focus { border-color: #500000; }
+    .input-box::placeholder { color: #bbb; }
+    .send-btn {
+      width: 40px; height: 40px; border-radius: 50%;
+      background: #500000; border: none; cursor: pointer;
+      display: flex; align-items: center; justify-content: center;
+      flex-shrink: 0; transition: background 0.15s, opacity 0.15s;
+    }
+    .send-btn:hover { background: #6a0000; }
+    .send-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+    .send-btn svg { width: 16px; height: 16px; fill: white; margin-left: 2px; }
+  </style>
+</head>
+<body>
+
+<!-- ── Landing ── -->
+<div id="landing">
+  <h1>What can I help with?</h1>
+
+  <div class="landing-input-wrap">
+    <textarea id="landingInput" rows="1"
+      placeholder="Ask anything about TAMU ECE..."></textarea>
+    <button class="landing-send-btn" id="landingSendBtn" disabled>
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+
+  <div class="landing-chips">
+    <button class="chip" onclick="sendFromLanding('Who are the AI/ML faculty?')">
+      <span class="chip-icon">🧑‍🏫</span> AI/ML Faculty
+    </button>
+    <button class="chip" onclick="sendFromLanding('What PhD programs are available?')">
+      <span class="chip-icon">🎓</span> PhD Programs
+    </button>
+    <button class="chip" onclick="sendFromLanding('How do I apply for admission?')">
+      <span class="chip-icon">📋</span> Admissions
+    </button>
+    <button class="chip" onclick="sendFromLanding('What research centers exist?')">
+      <span class="chip-icon">🔬</span> Research Centers
+    </button>
+  </div>
+</div>
+
+<!-- ── Chat view ── -->
+<div id="chatView">
+  <div class="chat-header">
+    <div class="chat-header-icon">
+      <svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7H3a7 7 0 017-7h1V5.73A2 2 0 0110 4a2 2 0 012-2m-5 12a1 1 0 100 2 1 1 0 000-2m10 0a1 1 0 100 2 1 1 0 000-2M3 21v-1a7 7 0 017-7h4a7 7 0 017 7v1H3z"/></svg>
+    </div>
+    <div>
+      <h1>TAMU ECE Assistant</h1>
+      <p>Powered by real-time data from engineering.tamu.edu/electrical</p>
+    </div>
+    <div class="header-badge">🟢 Online</div>
+  </div>
+
+  <div class="filter-bar" id="filterBar"></div>
+  <div class="messages" id="messages"></div>
+
+  <div class="input-area">
+    <div class="input-row">
+      <textarea class="input-box" id="inputBox" rows="1"
+        placeholder="Ask anything about TAMU ECE..."></textarea>
+      <button class="send-btn" id="sendBtn" disabled>
+        <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+const BACKEND = "http://localhost:8000";
+
+const SECTION_COLORS = {
+  people:     { bg: "#ede9fe", text: "#6d28d9" },
+  research:   { bg: "#dbeafe", text: "#1d4ed8" },
+  academics:  { bg: "#dcfce7", text: "#15803d" },
+  admissions: { bg: "#fef9c3", text: "#a16207" },
+  news:       { bg: "#fee2e2", text: "#b91c1c" },
+  events:     { bg: "#ffedd5", text: "#c2410c" },
+  about:      { bg: "#f1f5f9", text: "#475569" },
+};
+
+const FILTERS = [
+  { label: "All", value: "" },
+  { label: "Faculty & People", value: "people" },
+  { label: "Research", value: "research" },
+  { label: "Academics", value: "academics" },
+  { label: "Admissions", value: "admissions" },
+  { label: "News", value: "news" },
+  { label: "Events", value: "events" },
+];
+
+const BOT_SVG  = `<svg viewBox="0 0 24 24"><path d="M12 2a2 2 0 012 2c0 .74-.4 1.39-1 1.73V7h1a7 7 0 017 7H3a7 7 0 017-7h1V5.73A2 2 0 0110 4a2 2 0 012-2m-5 12a1 1 0 100 2 1 1 0 000-2m10 0a1 1 0 100 2 1 1 0 000-2M3 21v-1a7 7 0 017-7h4a7 7 0 017 7v1H3z"/></svg>`;
+const USER_SVG = `<svg viewBox="0 0 24 24"><path d="M12 12c2.7 0 4.8-2.1 4.8-4.8S14.7 2.4 12 2.4 7.2 4.5 7.2 7.2 9.3 12 12 12zm0 2.4c-3.2 0-9.6 1.6-9.6 4.8v2.4h19.2v-2.4c0-3.2-6.4-4.8-9.6-4.8z"/></svg>`;
+
+let activeFilter = "";
+let isStreaming = false;
+
+const landing    = document.getElementById("landing");
+const chatView   = document.getElementById("chatView");
+const filterBar  = document.getElementById("filterBar");
+const inputBox   = document.getElementById("inputBox");
+const sendBtn    = document.getElementById("sendBtn");
+const messages   = document.getElementById("messages");
+const landingInput    = document.getElementById("landingInput");
+const landingSendBtn  = document.getElementById("landingSendBtn");
+
+// Build filter buttons
+FILTERS.forEach(f => {
+  const btn = document.createElement("button");
+  btn.className = "filter-btn" + (f.value === "" ? " active" : "");
+  btn.textContent = f.label;
+  btn.onclick = () => {
+    activeFilter = f.value;
+    filterBar.querySelectorAll(".filter-btn").forEach(b => b.classList.remove("active"));
+    btn.classList.add("active");
+  };
+  filterBar.appendChild(btn);
+});
+
+// Landing input wiring
+landingInput.addEventListener("input", () => {
+  landingSendBtn.disabled = !landingInput.value.trim();
+  landingInput.style.height = "auto";
+  landingInput.style.height = Math.min(landingInput.scrollHeight, 120) + "px";
+});
+landingInput.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); sendFromLanding(landingInput.value.trim()); }
+});
+landingSendBtn.addEventListener("click", () => sendFromLanding(landingInput.value.trim()));
+
+function sendFromLanding(text) {
+  if (!text) return;
+  // Switch to chat view
+  landing.style.display = "none";
+  document.body.style.background = "#fff";
+  document.body.style.alignItems = "center";
+  chatView.style.display = "flex";
+  // Prefill and send
+  inputBox.value = text;
+  send();
+}
+
+// Chat input wiring
+inputBox.addEventListener("input", () => {
+  sendBtn.disabled = !inputBox.value.trim() || isStreaming;
+  inputBox.style.height = "auto";
+  inputBox.style.height = Math.min(inputBox.scrollHeight, 120) + "px";
+});
+inputBox.addEventListener("keydown", e => {
+  if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); }
+});
+sendBtn.addEventListener("click", send);
+
+function esc(t) {
+  return String(t).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+}
+
+function addBotMessage(text) {
+  const msg = document.createElement("div");
+  msg.className = "msg bot";
+  msg.innerHTML = `<div class="avatar bot">${BOT_SVG}</div><div class="msg-body"><div class="bubble">${esc(text)}</div></div>`;
+  messages.appendChild(msg);
+  messages.scrollTop = messages.scrollHeight;
+  return msg;
+}
+
+function addUserMessage(text) {
+  const msg = document.createElement("div");
+  msg.className = "msg user";
+  msg.innerHTML = `<div class="avatar user">${USER_SVG}</div><div class="msg-body"><div class="bubble">${esc(text)}</div></div>`;
+  messages.appendChild(msg);
+  messages.scrollTop = messages.scrollHeight;
+}
+
+function addTyping() {
+  const msg = document.createElement("div");
+  msg.className = "msg bot";
+  msg.innerHTML = `<div class="avatar bot">${BOT_SVG}</div><div class="msg-body"><div class="bubble"><div class="typing-dots"><span></span><span></span><span></span></div></div></div>`;
+  messages.appendChild(msg);
+  messages.scrollTop = messages.scrollHeight;
+  return msg;
+}
+
+function buildSourcesHTML(sources) {
+  if (!sources || !sources.length) return "";
+  const items = sources.slice(0, 3).map(s => {
+    const col = SECTION_COLORS[s.section] || { bg: "#f1f5f9", text: "#475569" };
+    const title = s.title
+      .replace(" | Texas A&M University Engineering", "")
+      .replace(" - Engineering News", "")
+      .slice(0, 60);
+    return `<a class="source-link" href="${esc(s.url)}" target="_blank" rel="noopener">
+      <span class="source-dot" style="background:${col.text}"></span>
+      <span class="source-text">${esc(title)}</span>
+      <span class="source-tag" style="background:${col.bg};color:${col.text}">${esc(s.section)}</span>
+    </a>`;
+  }).join("");
+  return `<div class="sources"><div class="sources-label">Sources</div>${items}</div>`;
+}
+
+async function send() {
+  const q = inputBox.value.trim();
+  if (!q || isStreaming) return;
+
+  inputBox.value = "";
+  inputBox.style.height = "auto";
+  sendBtn.disabled = true;
+  isStreaming = true;
+
+  addUserMessage(q);
+  const typing = addTyping();
+
+  try {
+    const res = await fetch(`${BACKEND}/chat`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ question: q, section_filter: activeFilter || undefined }),
+    });
+
+    if (!res.ok) {
+      const err = await res.text();
+      throw new Error(`Server error ${res.status}: ${err}`);
+    }
+
+    typing.remove();
+    const botMsg = document.createElement("div");
+    botMsg.className = "msg bot";
+    botMsg.innerHTML = `<div class="avatar bot">${BOT_SVG}</div><div class="msg-body"><div class="bubble"></div></div>`;
+    messages.appendChild(botMsg);
+    const bubble  = botMsg.querySelector(".bubble");
+    const msgBody = botMsg.querySelector(".msg-body");
+
+    const reader  = res.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = "";
+    let answer = "";
+    let sources = [];
+    let nextIsSource = false;
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.replace(/\r\n/g, "\n").split("\n");
+      buffer = lines.pop() ?? "";
+
+      for (const line of lines) {
+        if (line.startsWith("event:")) { nextIsSource = line.includes("sources"); continue; }
+        if (!line.startsWith("data:")) continue;
+        const raw = line.slice(5);
+        const token = raw.startsWith(" ") ? raw.slice(1) : raw;
+        if (token === "[DONE]") continue;
+        if (nextIsSource) {
+          nextIsSource = false;
+          try { sources = JSON.parse(token); } catch {}
+          continue;
+        }
+        if (token.trimStart().startsWith("[")) {
+          try { const p = JSON.parse(token); if (Array.isArray(p)) { sources = p; continue; } } catch {}
+        }
+        answer += token.replace(/\\n/g, "\n");
+        bubble.textContent = answer;
+        messages.scrollTop = messages.scrollHeight;
+      }
+    }
+
+    if (sources.length) msgBody.insertAdjacentHTML("beforeend", buildSourcesHTML(sources));
+
+  } catch (err) {
+    typing.remove();
+    addBotMessage("⚠️ " + err.message);
+  } finally {
+    isStreaming = false;
+    sendBtn.disabled = !inputBox.value.trim();
+  }
+}
+</script>
+</body>
+</html>

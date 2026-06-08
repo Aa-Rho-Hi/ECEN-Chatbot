@@ -1,0 +1,54 @@
+name: "🐞 Bug report"
+description: Report a problem with the TAMU ECE chatbot. Claude will verify and, if confirmed, open a fix PR for human review.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for testing the chatbot! Fill this out and Claude will triage it
+        automatically. To explicitly ask Claude to act, mention **@claude**
+        anywhere in the description.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What went wrong?
+      description: The question you asked and the answer you got.
+      placeholder: |
+        I asked: "List all faculty in the power & energy area"
+        It answered: only 3 names, then cut off.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: What did you expect?
+      placeholder: The full list of faculty for that area.
+    validations:
+      required: true
+  - type: input
+    id: query
+    attributes:
+      label: Exact query (if applicable)
+      placeholder: which professors research information theory?
+  - type: dropdown
+    id: area
+    attributes:
+      label: Which part of the app?
+      options:
+        - Answer quality / wrong answer
+        - Answer cut off / incomplete
+        - Wrong or missing sources
+        - Frontend / UI
+        - Backend error / crash
+        - Crawling / indexing
+        - Other
+    validations:
+      required: true
+  - type: checkboxes
+    id: ask-claude
+    attributes:
+      label: Let Claude handle it
+      options:
+        - label: "@claude please verify this and open a fix PR if it's a real bug"
+          required: false
