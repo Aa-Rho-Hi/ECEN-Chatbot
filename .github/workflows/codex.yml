@@ -1,159 +1,106 @@
-name: Codex Implement (fix)
+name: AI Implement (fix)
 
 # Phase 2 of the report → fix loop. The maintainer approves a triaged plan by
-# commenting "@codex implement" on the issue. Codex then writes the fix and the
+# commenting "@codex implement" on the issue. A Python script calls the OpenAI
+# API directly on the runner (no container isolation), writes the fix, and the
 # workflow opens a PR — but ONLY if the backend still compiles. A human merges.
-#
-#   Job 1 (codex):   implements the fix in the workspace, runs a py_compile gate,
-#                    emits a diff. Has OPENAI_API_KEY but only `contents: read`.
-#   Job 2 (open_pr): applies the diff + opens the PR. Write access, NO api key.
 
 on:
   issue_comment:
     types: [created]
 
 jobs:
-  codex:
-    # Only the explicit approval phrase triggers an implementation run.
+  implement:
     if: ${{ github.event.issue && contains(github.event.comment.body, '@codex implement') }}
     runs-on: ubuntu-latest
     permissions:
-      contents: read
-    outputs:
-      final_message: ${{ steps.run_codex.outputs.final-message }}
-      issue_number: ${{ github.event.issue.number }}
-      compile_ok: ${{ steps.compile.outputs.ok }}
+      contents: write
+      pull-requests: write
+      issues: write
+
     steps:
       - uses: actions/checkout@v5
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
         with:
-          persist-credentials: false
+          python-version: "3.11"
 
-      - name: Run Codex (implement the approved fix)
-        id: run_codex
-        uses: openai/codex-action@v1
-        with:
-          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
-          sandbox: workspace-write
-          safety-strategy: drop-sudo
-          output-file: codex-output.md
-          prompt: |
-            You are the maintainer agent for the TAMU ECE RAG chatbot.
-            Read AGENTS.md for the file map and how to verify changes.
+      - name: Install OpenAI SDK
+        run: pip install openai
 
-            The maintainer APPROVED fixing issue #${{ github.event.issue.number }}.
-            Issue:
-            ----
-            Title: ${{ github.event.issue.title }}
+      - name: Generate and apply fix
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ISSUE_NUMBER:   ${{ github.event.issue.number }}
+          ISSUE_TITLE:    ${{ github.event.issue.title }}
+          ISSUE_BODY:     ${{ github.event.issue.body }}
+          COMMENT_BODY:   ${{ github.event.comment.body }}
+        run: python .github/scripts/implement.py
 
-            ${{ github.event.issue.body }}
-            ----
-            Approval comment (may contain extra instructions):
-            ${{ github.event.comment.body }}
-            ----
-            Implement the smallest correct fix by editing files in the working
-            tree. Do NOT break the backend: keep every Python file importable and
-            py_compile-clean, and don't change unrelated behavior (retrieval,
-            roster injection, answer completeness). Run `python -m py_compile
-            backend/*.py crawler/*.py` yourself before finishing. Summarize the
-            root cause and your change in your final message. Do not run git or
-            open a PR — the workflow does that.
-
-      - name: Verify backend still compiles (gate)
+      - name: Verify backend compiles (gate)
         id: compile
         run: |
-          if python -m py_compile backend/*.py crawler/*.py; then
-            echo "ok=true" >> "$GITHUB_OUTPUT"
+          if python -m py_compile backend/*.py crawler/*.py 2>&1; then
+            echo "ok=true"  >> "$GITHUB_OUTPUT"
             echo "py_compile passed."
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
             echo "py_compile FAILED — will not open a PR."
           fi
 
-      - name: Capture diff (only if it compiles)
+      - name: Check for changes
+        id: diff
         run: |
-          if [ "${{ steps.compile.outputs.ok }}" = "true" ]; then
-            git add -A
-            git diff --cached > codex.patch || true
-          else
-            : > codex.patch
-          fi
-          echo "----- proposed patch -----"; cat codex.patch || true
-
-      - name: Upload results
-        uses: actions/upload-artifact@v4
-        with:
-          name: codex-results
-          path: |
-            codex.patch
-            codex-output.md
-          if-no-files-found: ignore
-
-  open_pr:
-    needs: codex
-    runs-on: ubuntu-latest
-    permissions:
-      contents: write
-      pull-requests: write
-      issues: write
-    steps:
-      - uses: actions/checkout@v5
-
-      - name: Download results
-        uses: actions/download-artifact@v4
-        with:
-          name: codex-results
-
-      - name: Apply patch (if any)
-        id: apply
-        run: |
-          if [ -s codex.patch ]; then
-            git apply codex.patch && echo "changed=true" >> "$GITHUB_OUTPUT"
-          else
+          git add -A
+          if git diff --cached --quiet; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No files changed."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "Changes detected:"
+            git diff --cached --stat
           fi
-          rm -f codex.patch codex-output.md
 
       - name: Open Pull Request
-        if: steps.apply.outputs.changed == 'true'
+        if: steps.compile.outputs.ok == 'true' && steps.diff.outputs.changed == 'true'
         uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.GITHUB_TOKEN }}
-          branch: codex/fix-issue-${{ needs.codex.outputs.issue_number }}
+          branch: codex/fix-issue-${{ github.event.issue.number }}
           base: main
-          title: "Fix issue #${{ needs.codex.outputs.issue_number }} (Codex)"
+          title: "Fix issue #${{ github.event.issue.number }} (AI)"
           body: |
-            Automated fix proposed by **Codex** for issue #${{ needs.codex.outputs.issue_number }}, after maintainer approval.
+            Automated fix for issue #${{ github.event.issue.number }}.
 
-            ${{ needs.codex.outputs.final_message }}
+            ✅ Passed the `py_compile` gate.
+            ⚠️ Review required — this PR will not auto-merge.
 
-            ---
-            ✅ Passed the `py_compile` gate. ⚠️ Review required — this PR will not auto-merge. Closes #${{ needs.codex.outputs.issue_number }} when merged.
+            Closes #${{ github.event.issue.number }} when merged.
           delete-branch: true
 
       - name: Comment result on the issue
         uses: actions/github-script@v7
         env:
-          FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
-          CHANGED: ${{ steps.apply.outputs.changed }}
-          COMPILE_OK: ${{ needs.codex.outputs.compile_ok }}
-          ISSUE_NUMBER: ${{ needs.codex.outputs.issue_number }}
+          COMPILE_OK:   ${{ steps.compile.outputs.ok }}
+          CHANGED:      ${{ steps.diff.outputs.changed }}
+          ISSUE_NUMBER: ${{ github.event.issue.number }}
         with:
           github-token: ${{ github.token }}
           script: |
             const compileOk = process.env.COMPILE_OK === 'true';
-            const changed = process.env.CHANGED === 'true';
-            const msg = process.env.FINAL_MESSAGE || '(no message returned)';
-            let header;
-            if (!compileOk) {
-              header = '❌ Codex made a change but it failed the `py_compile` gate, so no PR was opened (this protects the backend from a broken build). See its notes below — you can refine and comment `@codex implement` again.';
-            } else if (changed) {
-              header = '✅ Codex implemented the approved fix and opened a PR (passed the compile gate). Review and merge when ready.';
+            const changed   = process.env.CHANGED   === 'true';
+            let msg;
+            if (changed && compileOk) {
+              msg = '✅ Fix implemented and PR opened. Review and merge when ready.';
+            } else if (!changed) {
+              msg = '🤖 No code changes were produced. Try commenting `@codex implement` again or apply the fix manually.';
             } else {
-              header = '🤖 Codex did not change any code. See its reasoning below.';
+              msg = '❌ A fix was generated but failed the `py_compile` gate — no PR opened. See the Actions log for details.';
             }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
-              repo: context.repo.repo,
+              repo:  context.repo.repo,
               issue_number: Number(process.env.ISSUE_NUMBER),
-              body: `${header}\n\n${msg}`,
+              body: msg,
             });
