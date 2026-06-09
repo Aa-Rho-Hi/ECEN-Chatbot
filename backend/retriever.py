@@ -111,7 +111,14 @@ _reranker: Optional[CrossEncoder] = None
 def _get_conn():
     global _conn
     if _conn is None or _conn.closed:
-        _conn = psycopg2.connect(PG_DSN)
+        host = PG_DSN  # may contain password — log only the host:port portion
+        try:
+            host_part = PG_DSN.split("@")[-1].split("/")[0]
+        except Exception:
+            host_part = "(unknown)"
+        log.info("Connecting to database at %s ...", host_part)
+        _conn = psycopg2.connect(PG_DSN, connect_timeout=10)
+        log.info("Database connection established.")
         with _conn.cursor() as cur:
             cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
             # pg_trgm powers word_similarity() for typo-tolerant keyword search.
@@ -582,8 +589,11 @@ def _people_by_area(topic_words: list[str]) -> list[dict]:
 
 
 async def retrieve_async(query: str, section_filter: Optional[str] = None) -> list[dict]:
+    import asyncio
     rewritten = await _rewrite_query(query)
-    return retrieve(rewritten, section_filter, _original_query=query)
+    # Run the blocking retrieval pipeline (psycopg2 + cross-encoder inference)
+    # in a thread so it doesn't stall the async event loop.
+    return await asyncio.to_thread(retrieve, rewritten, section_filter, _original_query=query)
 
 
 def retrieve(query: str, section_filter: Optional[str] = None, _original_query: Optional[str] = None) -> list[dict]:
