@@ -9,4 +9,3 @@ apscheduler
 python-dotenv
 httpx
 pydantic
-sentry-sdk[fastapi]

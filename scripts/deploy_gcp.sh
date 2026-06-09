@@ -14,7 +14,6 @@ OPENAI_BASE_URL="${OPENAI_BASE_URL:-https://api.openai.com/v1}"
 OPENAI_MODEL="${OPENAI_MODEL:-gpt-4o}"
 EMBEDDING_API_URL="${EMBEDDING_API_URL:-https://api.openai.com/v1}"
 EMBEDDING_MODEL="${EMBEDDING_MODEL:-text-embedding-3-small}"
-NEXT_PUBLIC_SENTRY_DSN="${NEXT_PUBLIC_SENTRY_DSN:-}"
 # ─────────────────────────────────────────────────────────────────────────────
 
 gcloud config set project "$PROJECT_ID"
@@ -30,7 +29,7 @@ gcloud run deploy ecen-backend \
   --image "$BACKEND_IMG" --region "$REGION" --platform managed --allow-unauthenticated \
   --add-cloudsql-instances "$CONN_NAME" \
   --memory 4Gi --cpu 2 --min-instances 1 --max-instances 4 --timeout 600 --cpu-boost \
-  --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,EMBEDDING_API_KEY=EMBEDDING_API_KEY:latest,PG_DSN=PG_DSN:latest,SENTRY_DSN=SENTRY_DSN:latest" \
+  --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,EMBEDDING_API_KEY=EMBEDDING_API_KEY:latest,PG_DSN=PG_DSN:latest" \
   --set-env-vars "OPENAI_BASE_URL=$OPENAI_BASE_URL,OPENAI_MODEL=$OPENAI_MODEL,EMBEDDING_API_URL=$EMBEDDING_API_URL,EMBEDDING_MODEL=$EMBEDDING_MODEL,DISABLE_SCHEDULER=1"
 
 BACKEND_URL="$(gcloud run services describe ecen-backend --region "$REGION" --format='value(status.url)')"
@@ -43,7 +42,7 @@ echo ">> Deploying ecen-frontend…"
 gcloud run deploy ecen-frontend \
   --image "$FRONTEND_IMG" --region "$REGION" --platform managed --allow-unauthenticated \
   --memory 512Mi --cpu 1 \
-  --set-env-vars "BACKEND_URL=$BACKEND_URL,NEXT_PUBLIC_SENTRY_DSN=$NEXT_PUBLIC_SENTRY_DSN"
+  --set-env-vars "BACKEND_URL=$BACKEND_URL"
 
 FRONTEND_URL="$(gcloud run services describe ecen-frontend --region "$REGION" --format='value(status.url)')"
 echo ">> Tightening backend CORS to the frontend URL…"

@@ -18,11 +18,6 @@ from typing import Optional
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-# Initialize Sentry as early as possible (no-op unless SENTRY_DSN is set), so the
-# FastAPI integration can capture unhandled exceptions in request handlers.
-from sentry_init import init_sentry
-init_sentry()
-
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse

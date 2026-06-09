@@ -11,17 +11,14 @@ name: Codex Fix
 
 on:
   issues:
-    types: [opened, labeled]
+    types: [opened]
   issue_comment:
     types: [created]
 
 jobs:
   codex:
-    # Trigger when: an issue mentions @codex, OR a Sentry-created issue lands /
-    # gets the `sentry` label, OR someone comments @codex.
     if: |
-      (github.event_name == 'issues' && github.event.action == 'opened' && contains(github.event.issue.body, '@codex')) ||
-      (github.event_name == 'issues' && github.event.action == 'labeled' && github.event.label.name == 'sentry') ||
+      (github.event_name == 'issues' && contains(github.event.issue.body, '@codex')) ||
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@codex'))
     runs-on: ubuntu-latest
     permissions:
@@ -47,9 +44,7 @@ jobs:
             You are the maintainer agent for the TAMU ECE RAG chatbot.
             Read AGENTS.md for the file map and how to verify changes.
 
-            A bug was reported in issue #${{ github.event.issue.number }}. It may
-            be a human report OR an automated Sentry crash report — if it contains
-            a stack trace, use the file/line frames to locate the failing code.
+            A bug was reported in issue #${{ github.event.issue.number }}:
             ----
             Title: ${{ github.event.issue.title }}
 

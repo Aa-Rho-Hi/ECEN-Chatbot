@@ -105,8 +105,8 @@ CREATE EXTENSION IF NOT EXISTS vector;
 
 ## 3. Secret Manager (keys + DSN)
 
-The backend reads `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, `PG_DSN`,
-and optionally `SENTRY_DSN`. Store the sensitive ones as secrets:
+The backend reads `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `OPENAI_MODEL`, and
+`PG_DSN`. Store the sensitive ones as secrets:
 
 ```bash
 # LLM key (real OpenAI GPT key, or your TAMU gateway key)
@@ -119,9 +119,6 @@ printf 'sk-YOUR-OPENAI-KEY' | gcloud secrets create EMBEDDING_API_KEY --data-fil
 printf 'postgresql://%s:%s@/%s?host=/cloudsql/%s' \
   "$DB_USER" "CHANGE_ME_STRONG" "$DB_NAME" "$CONN_NAME" \
   | gcloud secrets create PG_DSN --data-file=-
-
-# Optional: Sentry backend DSN
-printf 'https://...ingest.sentry.io/...' | gcloud secrets create SENTRY_DSN --data-file=-
 ```
 
 Grant Cloud Run's runtime service account access to the secrets:
@@ -129,7 +126,7 @@ Grant Cloud Run's runtime service account access to the secrets:
 ```bash
 export PROJECT_NUM=$(gcloud projects describe "$PROJECT_ID" --format='value(projectNumber)')
 export RUN_SA="$PROJECT_NUM-compute@developer.gserviceaccount.com"
-for S in OPENAI_API_KEY EMBEDDING_API_KEY PG_DSN SENTRY_DSN; do
+for S in OPENAI_API_KEY EMBEDDING_API_KEY PG_DSN; do
   gcloud secrets add-iam-policy-binding "$S" \
     --member="serviceAccount:$RUN_SA" --role=roles/secretmanager.secretAccessor
 done
@@ -169,7 +166,7 @@ gcloud run deploy ecen-backend \
   --memory 4Gi --cpu 2 \
   --min-instances 1 --max-instances 4 \
   --timeout 600 --cpu-boost \
-  --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,EMBEDDING_API_KEY=EMBEDDING_API_KEY:latest,PG_DSN=PG_DSN:latest,SENTRY_DSN=SENTRY_DSN:latest" \
+  --set-secrets "OPENAI_API_KEY=OPENAI_API_KEY:latest,EMBEDDING_API_KEY=EMBEDDING_API_KEY:latest,PG_DSN=PG_DSN:latest" \
   --set-env-vars "OPENAI_BASE_URL=https://api.openai.com/v1,OPENAI_MODEL=gpt-4o,EMBEDDING_API_URL=https://api.openai.com/v1,EMBEDDING_MODEL=text-embedding-3-small,DISABLE_SCHEDULER=1"
 
 export BACKEND_URL=$(gcloud run services describe ecen-backend --region "$REGION" --format='value(status.url)')
@@ -193,7 +190,7 @@ gcloud run deploy ecen-frontend \
   --platform managed \
   --allow-unauthenticated \
   --memory 512Mi --cpu 1 \
-  --set-env-vars "BACKEND_URL=$BACKEND_URL,NEXT_PUBLIC_SENTRY_DSN=https://...ingest.sentry.io/..."
+  --set-env-vars "BACKEND_URL=$BACKEND_URL"
 
 export FRONTEND_URL=$(gcloud run services describe ecen-frontend --region "$REGION" --format='value(status.url)')
 echo "Open: $FRONTEND_URL"
