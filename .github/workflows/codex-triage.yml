@@ -1,0 +1,72 @@
+name: Codex Triage (plan)
+
+# Phase 1 of the report → fix loop. When a tester files a bug from the app (an
+# issue labeled `user-report`), Codex VERIFIES whether it's real and posts a
+# detailed FIX PLAN as a comment — it does NOT touch code. The maintainer reads
+# the plan and, to approve, comments "@codex implement" (→ codex.yml, phase 2).
+
+on:
+  issues:
+    types: [opened, labeled]
+
+jobs:
+  triage:
+    if: |
+      (github.event.action == 'opened' && contains(github.event.issue.labels.*.name, 'user-report')) ||
+      (github.event.action == 'labeled' && github.event.label.name == 'user-report')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    outputs:
+      final_message: ${{ steps.run_codex.outputs.final-message }}
+      issue_number: ${{ github.event.issue.number }}
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          persist-credentials: false
+
+      - name: Run Codex (verify + plan only)
+        id: run_codex
+        uses: openai/codex-action@v1
+        with:
+          openai-api-key: ${{ secrets.OPENAI_API_KEY }}
+          sandbox: read-only
+          safety-strategy: drop-sudo
+          prompt: |
+            You are the maintainer agent for the TAMU ECE RAG chatbot. Read
+            AGENTS.md for the file map. A user reported a problem from the app:
+            ----
+            Title: ${{ github.event.issue.title }}
+
+            ${{ github.event.issue.body }}
+            ----
+            Do NOT edit any files. Produce a review for the maintainer:
+            1. VERIFY: is this a real, reproducible bug? Say clearly one of
+               "Confirmed", "Not a bug", or "Need more info", with your reasoning
+               from reading the actual code.
+            2. ROOT CAUSE: if confirmed, name the file(s) + function(s) responsible.
+            3. FIX PLAN: the smallest safe change you would make and why, plus any
+               risk of breaking the backend (imports, startup, retrieval path).
+            Be concise. End with the line:
+            "To apply this fix, comment: @codex implement".
+
+  post_plan:
+    runs-on: ubuntu-latest
+    needs: triage
+    if: needs.triage.outputs.final_message != ''
+    permissions:
+      issues: write
+    steps:
+      - uses: actions/github-script@v7
+        env:
+          PLAN: ${{ needs.triage.outputs.final_message }}
+          ISSUE_NUMBER: ${{ needs.triage.outputs.issue_number }}
+        with:
+          github-token: ${{ github.token }}
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER),
+              body: `🔍 **Codex triage — proposed fix plan**\n\n${process.env.PLAN}`,
+            });

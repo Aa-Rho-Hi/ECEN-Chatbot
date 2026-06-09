@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent } from "react";
-import { Send, Bot, User, ExternalLink, RefreshCw } from "lucide-react";
+import { Send, Bot, User, ExternalLink, RefreshCw, Flag, X, Check } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 
 interface Source { url: string; title: string; section: string; }
@@ -50,7 +50,84 @@ export default function ChatUI() {
   const inputRef = useRef<HTMLInputElement>(null);
   const hasMessages = messages.length > 0;
 
+  const [reportOpen, setReportOpen] = useState(false);
+  const [reportText, setReportText] = useState("");
+  const [reportStatus, setReportStatus] = useState<"idle" | "sending" | "sent" | "error">("idle");
+
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
+
+  async function submitReport() {
+    if (!reportText.trim() || reportStatus === "sending") return;
+    setReportStatus("sending");
+    const lastUser = [...messages].reverse().find(m => m.role === "user");
+    const lastAssistant = [...messages].reverse().find(m => m.role === "assistant" && !m.loading);
+    const context = [
+      lastUser ? `Q: ${lastUser.content}` : "",
+      lastAssistant ? `A: ${lastAssistant.content}` : "",
+    ].filter(Boolean).join("\n\n") || undefined;
+    try {
+      const res = await fetch("/api/report", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ description: reportText.trim(), context }),
+      });
+      if (!res.ok) throw new Error();
+      setReportStatus("sent");
+      setReportText("");
+      setTimeout(() => { setReportOpen(false); setReportStatus("idle"); }, 1800);
+    } catch {
+      setReportStatus("error");
+    }
+  }
+
+  const reportButton = (
+    <button onClick={() => setReportOpen(true)} title="Report a problem"
+      style={{ display: "flex", alignItems: "center", gap: "6px", padding: "5px 12px", borderRadius: "999px", fontSize: "0.75rem", border: `1px solid ${BORDER}`, backgroundColor: "transparent", color: "#6b7280", cursor: "pointer" }}>
+      <Flag size={12} /> Report a problem
+    </button>
+  );
+
+  const reportModal = reportOpen ? (
+    <div onClick={() => reportStatus !== "sending" && setReportOpen(false)}
+      style={{ position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.4)", display: "flex", alignItems: "center", justifyContent: "center", zIndex: 50, padding: "1rem" }}>
+      <div onClick={e => e.stopPropagation()}
+        style={{ width: "100%", maxWidth: "460px", backgroundColor: BG, borderRadius: "16px", border: `1px solid ${BORDER}`, padding: "20px", boxShadow: "0 10px 40px rgba(0,0,0,0.2)" }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "10px" }}>
+          <span style={{ fontWeight: 600, color: "#111111", fontSize: "0.95rem" }}>Report a problem</span>
+          <button onClick={() => setReportOpen(false)} style={{ background: "none", border: "none", cursor: "pointer", color: "#9ca3af" }}><X size={16} /></button>
+        </div>
+        {reportStatus === "sent" ? (
+          <div style={{ display: "flex", alignItems: "center", gap: "8px", color: "#15803d", padding: "12px 0", fontSize: "0.875rem" }}>
+            <Check size={16} /> Thanks! Your report was sent to the team.
+          </div>
+        ) : (
+          <>
+            <p style={{ color: "#6b7280", fontSize: "0.8rem", margin: "0 0 10px" }}>
+              Tell us what went wrong (wrong answer, missing info, an error, etc.). Your most recent question is attached automatically.
+            </p>
+            <textarea
+              value={reportText}
+              onChange={e => setReportText(e.target.value)}
+              placeholder="e.g. I asked for power & energy faculty and the list was cut off."
+              rows={4}
+              style={{ width: "100%", boxSizing: "border-box", resize: "vertical", padding: "10px 12px", borderRadius: "10px", border: `1px solid ${BORDER}`, fontSize: "0.85rem", fontFamily: "inherit", outline: "none", color: "#111111" }}
+            />
+            {reportStatus === "error" && (
+              <p style={{ color: "#b91c1c", fontSize: "0.78rem", margin: "8px 0 0" }}>Couldn't send the report. Please try again.</p>
+            )}
+            <div style={{ display: "flex", justifyContent: "flex-end", gap: "8px", marginTop: "12px" }}>
+              <button onClick={() => setReportOpen(false)}
+                style={{ padding: "8px 14px", borderRadius: "999px", border: `1px solid ${BORDER}`, background: "transparent", color: "#6b7280", fontSize: "0.8rem", cursor: "pointer" }}>Cancel</button>
+              <button onClick={submitReport} disabled={!reportText.trim() || reportStatus === "sending"}
+                style={{ padding: "8px 16px", borderRadius: "999px", border: "none", backgroundColor: reportText.trim() ? MAROON : BORDER, color: "white", fontSize: "0.8rem", cursor: reportText.trim() ? "pointer" : "default" }}>
+                {reportStatus === "sending" ? "Sending…" : "Send report"}
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  ) : null;
 
   async function send(question: string) {
     if (!question.trim() || streaming) return;
@@ -125,6 +202,9 @@ export default function ChatUI() {
           </button>
         ))}
       </div>
+
+      <div style={{ marginTop: "1.75rem" }}>{reportButton}</div>
+      {reportModal}
     </div>
   );
 
@@ -139,6 +219,7 @@ export default function ChatUI() {
             <Bot size={15} color="white" />
           </div>
           <span style={{ color: "#111111", fontWeight: 600, fontSize: "0.9rem" }}>TAMU ECE Assistant</span>
+          {reportButton}
         </div>
         <div style={{ display: "flex", gap: "6px", flexWrap: "wrap" }}>
           {SECTION_OPTIONS.map(o => (
@@ -225,6 +306,7 @@ export default function ChatUI() {
         </form>
       </div>
 
+      {reportModal}
       <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
     </div>
   );

@@ -92,10 +92,48 @@ class ChatResponse(BaseModel):
     sources: list[Source]
 
 
+class ReportRequest(BaseModel):
+    description: str = Field(..., min_length=5, max_length=4000,
+                            description="What went wrong, in the user's words.")
+    context: Optional[str] = Field(
+        None, max_length=8000,
+        description="Optional context, e.g. the recent question and answer.")
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
     return {"status": "ok", "last_reindex": _scheduler.last_reindex}
+
+
+@app.post("/report-issue")
+async def report_issue(req: ReportRequest):
+    """Create a GitHub issue from an in-app bug report so non-technical testers
+    can report problems without a GitHub account. Labeled 'user-report' so the
+    Codex triage workflow picks it up."""
+    import github_issues
+
+    if not github_issues.reporting_enabled():
+        raise HTTPException(status_code=503,
+                            detail="Issue reporting is not configured on the server.")
+
+    first_line = req.description.strip().splitlines()[0][:80]
+    title = f"[User report] {first_line}"
+    body = (
+        f"**Reported from the chat UI.**\n\n"
+        f"### What went wrong\n{req.description.strip()}\n"
+    )
+    if req.context:
+        body += f"\n### Context (recent conversation)\n{req.context.strip()}\n"
+    body += "\n_Filed automatically by the app on a tester's behalf._"
+
+    try:
+        issue = github_issues.create_issue(title, body, labels=["user-report"])
+    except Exception as e:  # noqa: BLE001
+        log.exception("Failed to create GitHub issue")
+        raise HTTPException(status_code=502, detail="Could not file the report.") from e
+
+    return {"ok": True, "issue": issue["number"], "url": issue["html_url"]}
 
 
 # URLs of synthetic, code-generated context chunks — excluded from cited sources.

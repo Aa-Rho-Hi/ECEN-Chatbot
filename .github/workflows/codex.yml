@@ -1,37 +1,34 @@
-name: Codex Fix
+name: Codex Implement (fix)
 
-# Agentic issue → verify → fix → PR loop, powered by OpenAI Codex.
-# A tester opens an Issue and mentions @codex (the bug template prompts this).
-#   Job 1 (codex):   verifies the bug + edits files in the workspace, emits a diff.
-#                    Has the OPENAI_API_KEY but only `contents: read` (no write).
-#   Job 2 (open_pr): applies the diff, opens a PR, comments on the issue.
-#                    Has write access but NOT the API key.
-# Splitting the two jobs is OpenAI's recommended pattern so a malicious issue
-# body can't both reach the key and push code. A human reviews + merges every PR.
+# Phase 2 of the report → fix loop. The maintainer approves a triaged plan by
+# commenting "@codex implement" on the issue. Codex then writes the fix and the
+# workflow opens a PR — but ONLY if the backend still compiles. A human merges.
+#
+#   Job 1 (codex):   implements the fix in the workspace, runs a py_compile gate,
+#                    emits a diff. Has OPENAI_API_KEY but only `contents: read`.
+#   Job 2 (open_pr): applies the diff + opens the PR. Write access, NO api key.
 
 on:
-  issues:
-    types: [opened]
   issue_comment:
     types: [created]
 
 jobs:
   codex:
-    if: |
-      (github.event_name == 'issues' && contains(github.event.issue.body, '@codex')) ||
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@codex'))
+    # Only the explicit approval phrase triggers an implementation run.
+    if: ${{ github.event.issue && contains(github.event.comment.body, '@codex implement') }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
     outputs:
       final_message: ${{ steps.run_codex.outputs.final-message }}
       issue_number: ${{ github.event.issue.number }}
+      compile_ok: ${{ steps.compile.outputs.ok }}
     steps:
       - uses: actions/checkout@v5
         with:
           persist-credentials: false
 
-      - name: Run Codex
+      - name: Run Codex (implement the approved fix)
         id: run_codex
         uses: openai/codex-action@v1
         with:
@@ -39,32 +36,48 @@ jobs:
           sandbox: workspace-write
           safety-strategy: drop-sudo
           output-file: codex-output.md
-          # Optional: pin a model, e.g. `model: gpt-5.1-codex`. Empty = Codex default.
           prompt: |
             You are the maintainer agent for the TAMU ECE RAG chatbot.
             Read AGENTS.md for the file map and how to verify changes.
 
-            A bug was reported in issue #${{ github.event.issue.number }}:
+            The maintainer APPROVED fixing issue #${{ github.event.issue.number }}.
+            Issue:
             ----
             Title: ${{ github.event.issue.title }}
 
             ${{ github.event.issue.body }}
             ----
+            Approval comment (may contain extra instructions):
+            ${{ github.event.comment.body }}
+            ----
+            Implement the smallest correct fix by editing files in the working
+            tree. Do NOT break the backend: keep every Python file importable and
+            py_compile-clean, and don't change unrelated behavior (retrieval,
+            roster injection, answer completeness). Run `python -m py_compile
+            backend/*.py crawler/*.py` yourself before finishing. Summarize the
+            root cause and your change in your final message. Do not run git or
+            open a PR — the workflow does that.
 
-            1. VERIFY whether this is a real bug by reading the relevant code.
-            2. If it is NOT a real bug, do NOT modify any files; explain what you
-               found in your final message.
-            3. If it IS a real bug, implement the smallest correct fix by editing
-               files in the working tree. Keep Python py_compile-clean. In your
-               final message, summarize the root cause and your change.
-            Do not run git, push, or open PRs — the workflow handles that.
-
-      - name: Capture diff
+      - name: Verify backend still compiles (gate)
+        id: compile
         run: |
-          git add -A
-          git diff --cached > codex.patch || true
-          echo "----- proposed patch -----"
-          cat codex.patch || true
+          if python -m py_compile backend/*.py crawler/*.py; then
+            echo "ok=true" >> "$GITHUB_OUTPUT"
+            echo "py_compile passed."
+          else
+            echo "ok=false" >> "$GITHUB_OUTPUT"
+            echo "py_compile FAILED — will not open a PR."
+          fi
+
+      - name: Capture diff (only if it compiles)
+        run: |
+          if [ "${{ steps.compile.outputs.ok }}" = "true" ]; then
+            git add -A
+            git diff --cached > codex.patch || true
+          else
+            : > codex.patch
+          fi
+          echo "----- proposed patch -----"; cat codex.patch || true
 
       - name: Upload results
         uses: actions/upload-artifact@v4
@@ -109,12 +122,12 @@ jobs:
           base: main
           title: "Fix issue #${{ needs.codex.outputs.issue_number }} (Codex)"
           body: |
-            Automated fix proposed by **Codex** for issue #${{ needs.codex.outputs.issue_number }}.
+            Automated fix proposed by **Codex** for issue #${{ needs.codex.outputs.issue_number }}, after maintainer approval.
 
             ${{ needs.codex.outputs.final_message }}
 
             ---
-            ⚠️ Review required — this PR will not auto-merge. Closes #${{ needs.codex.outputs.issue_number }} when merged.
+            ✅ Passed the `py_compile` gate. ⚠️ Review required — this PR will not auto-merge. Closes #${{ needs.codex.outputs.issue_number }} when merged.
           delete-branch: true
 
       - name: Comment result on the issue
@@ -122,15 +135,22 @@ jobs:
         env:
           FINAL_MESSAGE: ${{ needs.codex.outputs.final_message }}
           CHANGED: ${{ steps.apply.outputs.changed }}
+          COMPILE_OK: ${{ needs.codex.outputs.compile_ok }}
           ISSUE_NUMBER: ${{ needs.codex.outputs.issue_number }}
         with:
           github-token: ${{ github.token }}
           script: |
+            const compileOk = process.env.COMPILE_OK === 'true';
             const changed = process.env.CHANGED === 'true';
             const msg = process.env.FINAL_MESSAGE || '(no message returned)';
-            const header = changed
-              ? '🤖 Codex verified this and opened a fix PR for your review.'
-              : '🤖 Codex looked into this but did not change any code (see its reasoning below).';
+            let header;
+            if (!compileOk) {
+              header = '❌ Codex made a change but it failed the `py_compile` gate, so no PR was opened (this protects the backend from a broken build). See its notes below — you can refine and comment `@codex implement` again.';
+            } else if (changed) {
+              header = '✅ Codex implemented the approved fix and opened a PR (passed the compile gate). Review and merge when ready.';
+            } else {
+              header = '🤖 Codex did not change any code. See its reasoning below.';
+            }
             await github.rest.issues.createComment({
               owner: context.repo.owner,
               repo: context.repo.repo,

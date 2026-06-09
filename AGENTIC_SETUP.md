@@ -1,79 +1,79 @@
-# Agentic Issue → Fix → PR Workflow (OpenAI Codex)
+# Agentic Report → Plan → Approve → Fix (OpenAI Codex)
 
-This repo uses the official [OpenAI Codex GitHub Action](https://github.com/openai/codex-action)
-to turn bug reports into reviewed fixes. **No fix is ever merged automatically —
-a human approves and merges every PR.**
+Testers report bugs **from inside the app** (no GitHub account needed). Codex
+verifies and proposes a fix plan for you to approve. Only after you approve does
+it write the fix and open a PR — and only if the backend still compiles. **You
+merge every PR.**
 
 ## The loop
 
 ```
-Tester finds a bug
-      │
-      ▼
-Opens a GitHub Issue (Bug report template) with "@codex" in the body
-      │
-      ▼  (.github/workflows/codex.yml — job 1 "codex")
-Codex VERIFIES the issue against the code  [has OPENAI_API_KEY, contents: read only]
-      │
-      ├─ not a real bug ─▶ makes no edits, emits an explanation
-      │
-      └─ confirmed ─▶ edits files in the workspace, emits a diff (artifact)
-      │
-      ▼  (.github/workflows/codex.yml — job 2 "open_pr")  [write access, NO api key]
-Applies the diff → opens PR  codex/fix-issue-<n>  → comments result on the issue
-      │
-      ▼
-┌─────────────────────────────┐
-│  HUMAN reviews + clicks Merge │  ◀── the only merge gate
-└─────────────────────────────┘
+Tester clicks "Report a problem" in the chat UI, types what's wrong
+        │
+        ▼  POST /api/report → backend POST /report-issue  (GH_ISSUE_TOKEN)
+   Backend files a GitHub issue, labeled `user-report`
+        │
+        ▼  .github/workflows/codex-triage.yml  (label: user-report)
+   Codex VERIFIES + posts a "proposed fix plan" comment   ← read-only, no code
+        │
+        ▼  You read the plan. To approve, comment:  @codex implement
+        │
+        ▼  .github/workflows/codex.yml  (phase 2)
+   Codex writes the fix → py_compile gate → opens a PR     ← never if it won't compile
+        │
+        ▼
+   You review + merge.   ← the only merge gate
 ```
 
-The two jobs are deliberately separated: job 1 holds the `OPENAI_API_KEY` but
-can't push; job 2 can push but never sees the key. This is OpenAI's recommended
-pattern so a malicious issue body can't both reach the key and write code.
+## What's in the repo
+| Piece | File |
+|---|---|
+| UI report button + modal | `frontend/components/ChatUI.tsx` |
+| Frontend proxy | `frontend/app/api/report/route.ts` |
+| Backend endpoint | `POST /report-issue` in `backend/main.py` |
+| GitHub issue creation | `backend/github_issues.py` |
+| Phase 1 — triage/plan | `.github/workflows/codex-triage.yml` |
+| Phase 2 — implement (gated) | `.github/workflows/codex.yml` |
+| PR review (optional) | `.github/workflows/codex-review.yml` |
+| Agent context | `AGENTS.md` |
 
 ## One-time setup
 
-1. **Connect Codex to GitHub / install the Codex GitHub app** on
-   `Aa-Rho-Hi/ECEN-Chatbot` (https://github.com/apps/codex, or from the Codex
-   settings at https://chatgpt.com/codex). This lets Codex operate on the repo.
+1. **Codex GitHub app + API key** (powers phases 1–2):
+   - Install the Codex GitHub app on `Aa-Rho-Hi/ECEN-Chatbot` (github.com/apps/codex).
+   - Add repo secret `OPENAI_API_KEY` (Settings → Secrets and variables → Actions).
+     The OpenAI account needs billing/credit.
 
-2. **Add the API key secret.** Repo → Settings → Secrets and variables → Actions →
-   New repository secret:
-   - Name: `OPENAI_API_KEY`
-   - Value: your OpenAI API key from https://platform.openai.com/api-keys
-   - The key's OpenAI account needs available credit/billing enabled.
+2. **Token for the app to file issues** (powers the UI report button):
+   - Create a **fine-grained PAT**: github.com/settings/tokens → Fine-grained →
+     repo `ECEN-Chatbot` → Repository permissions → **Issues: Read and write**.
+   - Put it in the backend env as `GH_ISSUE_TOKEN`, and set
+     `GH_REPO=Aa-Rho-Hi/ECEN-Chatbot`. Locally that's `.env`; on Cloud Run it's a
+     Secret Manager secret. **Never commit it.**
 
-3. **Protect `main` so nothing merges without you.** Repo → Settings → Branches →
-   add a rule for `main`:
-   - ✅ Require a pull request before merging
-   - ✅ Require approvals (1)
-   - ✅ Do not allow bypassing the above settings
+3. **The `user-report` label** must exist (the backend applies it). Create it once
+   in the repo's Labels page, or it's auto-created on first issue.
 
-## Files in this setup
-| File | Role |
-|---|---|
-| `.github/workflows/codex.yml` | Triggers on issues / `@codex`; verifies + opens fix PRs |
-| `.github/workflows/codex-review.yml` | Codex PR review (read-only comment) |
-| `.github/ISSUE_TEMPLATE/bug_report.yml` | Structured bug report that feeds the loop |
-| `AGENTS.md` | Project context + verify notes Codex reads automatically |
+4. **Protect `main`** so nothing merges without you: Settings → Branches →
+   require a PR + 1 approval.
 
-## Good to know
-- **Trigger phrase is `@codex`** (configurable in the `if:` block of `codex.yml`).
-- **Sandbox has no network.** Codex can read code and run `py_compile`, but
-  `npm install` / DB connections won't work in CI — it validates by reasoning.
-- **The review workflow won't run on Codex's own PRs.** GitHub doesn't re-trigger
-  workflows for PRs opened with the default `GITHUB_TOKEN`. It runs on human PRs;
-  to also review Codex PRs, open them with a Personal Access Token instead.
-- **Cost:** runs bill your OpenAI key per invocation; only issues containing
-  `@codex` trigger a run.
+## How you drive it day to day
+- A report comes in → you get a GitHub notification with Codex's **fix plan**.
+- Happy with it? Comment **`@codex implement`** (you can add tweaks in the same
+  comment, e.g. `@codex implement — also add a test`).
+- Codex opens a PR **only if it compiles**. If its change fails the `py_compile`
+  gate, it posts the reasoning instead of a broken PR, and you can refine and
+  re-approve.
+- Review the PR and merge.
 
-## Security notes
-- `.env` and all secrets are git-ignored — never commit them.
-- Each workflow grants only the GitHub permissions in its `permissions:` block,
-  and branch protection prevents merging to `main` without your approval.
-
----
-_Switched from the Claude Code Action to Codex on 2026-06-08 to use an OpenAI
-API key. The Claude workflow files were removed; see git history if you want to
-switch back._
+## Notes
+- **Compile gate** (`python -m py_compile backend/*.py crawler/*.py`) is a syntax/
+  import-safety backstop so a fix can't ship a backend that won't start. It's not
+  a full test suite — review still matters.
+- **Job split:** the Codex job holds `OPENAI_API_KEY` with read-only repo scope;
+  a separate job opens the PR with write scope but no key (OpenAI's recommended
+  pattern against prompt-injection from issue text).
+- **Cost:** every report triggers one triage run; every `@codex implement`
+  triggers one implement run. Both bill your OpenAI key.
+- Reporting is **disabled gracefully** if `GH_ISSUE_TOKEN`/`GH_REPO` are unset —
+  the endpoint returns 503 and the UI shows a friendly error.
