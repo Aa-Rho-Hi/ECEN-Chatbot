@@ -55,6 +55,13 @@ HEADERS = {
     "User-Agent": "TAMU-ECE-Chatbot-Crawler/1.0 (educational; contact aarohi0402@gmail.com)"
 }
 
+# The People directory (profiles/index.html) is rendered client-side by
+# cfprofiles.js from this college-wide JSON feed; the raw HTML contains no
+# names, so BFS crawling alone misses everyone not linked from other pages
+# (notably all staff). We pull the feed directly instead.
+PROFILE_DATA_URL = "https://engineering.tamu.edu/profile-data.json"
+DEPT_TAG = "electrical"
+
 
 @dataclass
 class PageDoc:
@@ -130,12 +137,87 @@ def _extract_text(soup: BeautifulSoup, url: str) -> tuple[str, str]:
     return title, "\n".join(lines)
 
 
+def fetch_directory(session: requests.Session) -> tuple[list[PageDoc], list[str]]:
+    """Fetch the college-wide profile feed and build directory docs for ECE.
+
+    Returns (docs, profile_urls). Docs are: one card per person (contact info)
+    plus one complete roster doc per role (Staff, Faculty, Leadership, ...) so
+    'list all staff' queries can retrieve a complete enumeration. profile_urls
+    are individual profile pages to feed into the BFS queue (staff pages are
+    not linked from anywhere crawlable).
+    """
+    try:
+        resp = session.get(PROFILE_DATA_URL, timeout=30)
+        resp.raise_for_status()
+        people = resp.json()
+    except Exception as e:
+        log.warning(f"Profile feed fetch failed ({PROFILE_DATA_URL}): {e}")
+        return [], []
+
+    dept = [p for p in people if DEPT_TAG in (p.get("tag") or [])]
+    docs: list[PageDoc] = []
+    profile_urls: list[str] = []
+    rosters: dict[str, list[str]] = {}
+
+    for p in dept:
+        name = (p.get("name") or "").strip()
+        if not name:
+            continue
+        roles = [t for t in (p.get("tag") or []) if t != DEPT_TAG]
+        role = ", ".join(roles) or "Member"
+        titles = "; ".join(p.get("titles") or [])
+        link = (p.get("link") or "").strip()
+        url = urljoin("https://engineering.tamu.edu/", link) if link else ""
+        if url and _is_allowed(url):
+            profile_urls.append(url)
+
+        lines = [f"{name} — {role}, Department of Electrical and Computer Engineering"]
+        if titles:
+            lines.append(f"Title: {titles}")
+        if p.get("email"):
+            lines.append(f"Email: {p['email']}")
+        if p.get("phone"):
+            lines.append(f"Phone: {p['phone']}")
+        if p.get("office"):
+            lines.append(f"Office: {p['office']}")
+        if url:
+            lines.append(f"Profile: {url}")
+        docs.append(PageDoc(
+            url=(url or PROFILE_DATA_URL) + "#directory",
+            title=f"{name} ({role}) — ECE Directory",
+            section="people",
+            text="\n".join(lines),
+        ))
+        for r in roles:
+            rosters.setdefault(r, []).append(f"- {name}" + (f" ({titles})" if titles else ""))
+
+    for role, entries in rosters.items():
+        docs.append(PageDoc(
+            url=f"https://engineering.tamu.edu/electrical/profiles/index.html#{role.replace(' ', '-')}",
+            title=f"TAMU ECE {role} — complete directory roster",
+            section="people",
+            text=(f"Complete list of {role} in the Department of Electrical and "
+                  f"Computer Engineering at Texas A&M ({len(entries)} people):\n"
+                  + "\n".join(entries)),
+        ))
+
+    log.info(f"Directory feed: {len(dept)} ECE people → {len(docs)} docs, "
+             f"{len(profile_urls)} profile pages queued")
+    return docs, profile_urls
+
+
 def crawl() -> list[PageDoc]:
     visited: set[str] = set()
     queue: list[str] = [BASE_URL] + EXTRA_SEEDS
     docs: list[PageDoc] = []
     session = requests.Session()
     session.headers.update(HEADERS)
+
+    # Directory feed first: collects every ECE person (incl. staff) and seeds
+    # their individual profile pages into the BFS queue.
+    dir_docs, profile_urls = fetch_directory(session)
+    docs.extend(dir_docs)
+    queue.extend(profile_urls)
 
     while queue and len(visited) < MAX_PAGES:
         url = queue.pop(0)
