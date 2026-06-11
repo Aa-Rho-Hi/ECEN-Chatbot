@@ -30,6 +30,29 @@ steps:
       - '--region=${_DEPLOY_REGION}'
       - '--quiet'
 
+  # Keep the nightly re-index job on the same image. `jobs deploy` creates the
+  # job on first run and updates it afterwards. Env vars set manually on the
+  # job (PG_DSN) persist across deploys; --update-env-vars only touches the
+  # listed keys.
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk:slim'
+    id: DeployReindexJob
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'jobs'
+      - 'deploy'
+      - 'ecen-reindex'
+      - '--image=${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}'
+      - '--region=${_DEPLOY_REGION}'
+      - '--memory=4Gi'
+      - '--cpu=2'
+      - '--task-timeout=45m'
+      - '--max-retries=1'
+      - '--command=sh'
+      - '--args=-c,cd /app/crawler && python ingest.py --diff'
+      - '--update-env-vars=EMBEDDING_MODEL=all-MiniLM-L6-v2'
+      - '--quiet'
+
 images:
   - '${_AR_HOSTNAME}/${_AR_PROJECT_ID}/${_AR_REPOSITORY}/${_SERVICE_NAME}:${COMMIT_SHA}'
 

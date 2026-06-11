@@ -22,9 +22,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 WORKDIR /app
 
-# Python deps
-COPY backend/requirements.txt ./
-RUN pip install --no-cache-dir -r requirements.txt
+# Python deps (backend + crawler, so this image can also run the re-index job)
+COPY backend/requirements.txt ./requirements-backend.txt
+COPY crawler/requirements.txt ./requirements-crawler.txt
+RUN pip install --no-cache-dir -r requirements-backend.txt -r requirements-crawler.txt
 
 # Pre-bake ML models into the image so cold starts don't pay the download cost
 RUN python -c "\
@@ -32,8 +33,9 @@ from sentence_transformers import SentenceTransformer, CrossEncoder; \
 SentenceTransformer('sentence-transformers/all-MiniLM-L6-v2'); \
 CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')"
 
-# Backend source
+# Backend source + crawler (used by the ecen-reindex Cloud Run Job)
 COPY backend/ ./backend/
+COPY crawler/ ./crawler/
 
 # Next.js standalone output
 COPY --from=frontend-builder /app/.next/standalone ./frontend/
