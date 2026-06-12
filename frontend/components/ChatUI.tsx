@@ -251,7 +251,8 @@ export default function ChatUI() {
                     </div>
                   )}
                 </div>
-                {msg.sources && msg.sources.length > 0 && (
+                {/* Sources render only after the answer finishes streaming */}
+                {msg.sources && msg.sources.length > 0 && !(streaming && i === messages.length - 1) && (
                   <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>
                     <span style={{ fontSize: "0.7rem", color: "#6b7280", paddingLeft: "4px" }}>Sources</span>
                     {msg.sources.map((s, si) => {
