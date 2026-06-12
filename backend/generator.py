@@ -211,6 +211,8 @@ and excludes X. Preserve intent exactly; never generalize. If the message is \
 already self-contained, copy it unchanged.
 
 intent — exactly one of:
+- "chitchat": greetings, who/what are you, what can you do, thanks, goodbye — \
+small talk about the assistant itself that needs NO department facts.
 - "creator": who built/created/developed THIS chatbot or assistant.
 - "list_all_faculty": wants the complete department faculty list, not a \
 specific area.
@@ -241,7 +243,7 @@ def _extract_json(raw: str) -> dict | None:
 import re as _re_mod
 _json_re = _re_mod.compile(r"\{.*\}", _re_mod.S)
 
-_VALID_INTENTS = {"creator", "list_all_faculty", "people_by_area", "general"}
+_VALID_INTENTS = {"chitchat", "creator", "list_all_faculty", "people_by_area", "general"}
 
 
 async def route_question(question: str, history: list[dict] | None,

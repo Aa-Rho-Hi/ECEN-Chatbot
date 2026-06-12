@@ -152,7 +152,8 @@ async def report_issue(req: ReportRequest):
 
 
 # URLs of synthetic, code-generated context chunks — excluded from cited sources.
-_SYNTHETIC_URLS = {"knowledge-graph", "research-area-roster", "faculty-roster"}
+_SYNTHETIC_URLS = {"knowledge-graph", "research-area-roster", "faculty-roster",
+                   "about:eira"}
 # Roster paths supply their own already-curated, relevant source list — keep all
 # of those; only the open-ended retrieval path needs trimming.
 _ROSTER_URLS = {"research-area-roster", "faculty-roster"}
@@ -164,9 +165,6 @@ MAX_SOURCES = 6
 # only padded the top-k and shouldn't be shown to users as "sources". The LLM
 # context is NOT filtered — only what we display. Tune via env without deploy.
 SOURCE_MIN_SCORE = float(os.getenv("SOURCE_MIN_SCORE", "0"))
-# Always cite at least this many (best-available) sources even if all scores
-# are below the gate, so answers never appear unsourced.
-MIN_SOURCES = 2
 
 
 def _select_sources(chunks: list[dict]) -> list[dict]:
@@ -186,10 +184,12 @@ def _select_sources(chunks: list[dict]) -> list[dict]:
                      key=lambda c: c.get("rerank_score", 0.0) or 0.0, reverse=True)
     if any(c["url"] in _ROSTER_URLS for c in chunks):
         return ordered
+    # Only cite chunks that genuinely cleared the relevance gate. If nothing
+    # did, cite NOTHING — showing the least-irrelevant junk as "sources" is
+    # worse than an unsourced answer (the answer itself already says when it
+    # doesn't have the details).
     relevant = [c for c in ordered
                 if (c.get("rerank_score", 0.0) or 0.0) >= SOURCE_MIN_SCORE]
-    if len(relevant) < MIN_SOURCES:
-        relevant = ordered[:MIN_SOURCES]
     return relevant[:MAX_SOURCES]
 
 
@@ -224,6 +224,25 @@ def _is_creator_question(question: str) -> bool:
     return bool(_CREATOR_RE.search(question.strip()))
 
 
+# Context for small talk ("who are you", "hi", "what can you do") — answered
+# from the persona alone, with NO cited sources (url is in _SYNTHETIC_URLS).
+_IDENTITY_CHUNK = {
+    "url": "about:eira",
+    "title": "About EIRA",
+    "section": "about",
+    "rerank_score": 10.0,
+    "text": (
+        "EIRA (ECE Information & Resource Assistant) is the AI guide for the "
+        "Texas A&M Department of Electrical and Computer Engineering. EIRA can "
+        "answer questions about degree programs (BS/MS/PhD, online options, "
+        "certificates), admissions and scholarships, courses, all research "
+        "areas, faculty and staff (including who to contact for a given "
+        "research interest), news, and events — all drawn from the "
+        "department's official website."
+    ),
+}
+
+
 async def _prepare_chunks(req: "ChatRequest", route: Optional[dict] = None) -> list[dict]:
     """Assemble the context chunks for a question.
 
@@ -239,6 +258,11 @@ async def _prepare_chunks(req: "ChatRequest", route: Optional[dict] = None) -> l
     if intent == "creator" or (route is None and _is_creator_question(req.question)):
         log.info("Creator question detected: %r", req.question)
         return [_CREATOR_CHUNK]
+
+    # Small talk needs no retrieval and must not cite random pages as sources.
+    if intent == "chitchat":
+        log.info("Chitchat detected: %r", req.question)
+        return [_IDENTITY_CHUNK]
 
     # "Whom should I reach out to about <topic>?" — any phrasing, via router.
     if intent == "people_by_area" and (route or {}).get("topic"):
