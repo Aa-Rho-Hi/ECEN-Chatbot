@@ -318,6 +318,12 @@ async def chat_stream(req: ChatRequest):
     if not chunks:
         raise HTTPException(status_code=404, detail="No relevant content found for your question.")
 
+    # Give the generator the resolved interpretation too, so the answer targets
+    # what the follow-up actually meant — not a generic reading of it.
+    gen_question = req.question if search_req.question == req.question else (
+        f"{req.question}\n(In the context of this conversation, this means: "
+        f"{search_req.question})")
+
     log.info("Retrieved %d chunks for query %r:", len(chunks), req.question)
     for c in chunks:
         log.info("  [%.3f] %s", c.get("rerank_score", 0), c.get("chunk_id", c["url"]))
@@ -334,7 +340,7 @@ async def chat_stream(req: ChatRequest):
         # length-truncation handled inside generate_stream).
         emitted = 0
         try:
-            async for delta in generate_stream(req.question, chunks, history=history):
+            async for delta in generate_stream(gen_question, chunks, history=history):
                 if not delta:
                     continue
                 emitted += len(delta)
@@ -348,7 +354,7 @@ async def chat_stream(req: ChatRequest):
         # If streaming produced nothing, fall back to a buffered generation
         # (and retry with a single chunk) so the user never sees an empty reply.
         if emitted == 0:
-            answer = await _generate_full(req.question, chunks, history=history)
+            answer = await _generate_full(gen_question, chunks, history=history)
             if not answer and len(chunks) > 1:
                 log.warning("Empty answer with %d chunks, retrying with 1 chunk", len(chunks))
                 answer = await _generate_full(req.question, chunks[:1])
@@ -371,7 +377,10 @@ async def chat_sync(req: ChatRequest):
     if not chunks:
         raise HTTPException(status_code=404, detail="No relevant content found for your question.")
 
-    answer = await generate(req.question, chunks, history=history)
+    gen_question = req.question if search_req.question == req.question else (
+        f"{req.question}\n(In the context of this conversation, this means: "
+        f"{search_req.question})")
+    answer = await generate(gen_question, chunks, history=history)
     sources = [Source(url=c["url"], title=c["title"], section=c["section"])
                for c in _select_sources(chunks)]
     return ChatResponse(answer=answer, sources=sources)

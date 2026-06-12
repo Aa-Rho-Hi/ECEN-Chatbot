@@ -192,11 +192,23 @@ def _history_messages(history: list[dict] | None) -> list[dict]:
 
 
 REWRITE_PROMPT = (
-    "Rewrite the user's latest question as a single, fully self-contained question "
-    "about the TAMU Electrical & Computer Engineering department. Resolve every "
-    "pronoun and implicit reference ('he', 'that program', 'what about online?') "
-    "using the conversation. Keep it short and keyword-rich for search. "
-    "If the question is already self-contained, return it UNCHANGED. "
+    "Rewrite the user's latest message as ONE fully self-contained search question "
+    "about the TAMU Electrical & Computer Engineering department.\n"
+    "Rules:\n"
+    "1. Resolve every pronoun and implicit reference ('he', 'it', 'that area') to the "
+    "SPECIFIC topic under discussion — the most recent subject the user was pursuing, "
+    "not just any topic mentioned.\n"
+    "2. If the user is correcting a misunderstanding ('I'm not asking about X, I mean Y'), "
+    "the rewrite MUST be about Y and explicitly exclude X.\n"
+    "3. Preserve the user's intent exactly — do not generalize a specific question into a "
+    "broad one.\n"
+    "4. Keep it short and keyword-rich. If already self-contained, return it unchanged.\n"
+    "Examples:\n"
+    "- Discussing security research; user asks 'can it be done online' -> "
+    "'Can security research at TAMU ECE be done online or remotely?'\n"
+    "- Bot answered about degree programs; user says 'I am not asking about graduate "
+    "programs, I am asking about research' -> 'What security research opportunities and "
+    "faculty does TAMU ECE have (research, not degree programs)?'\n"
     "Return ONLY the rewritten question, nothing else."
 )
 
