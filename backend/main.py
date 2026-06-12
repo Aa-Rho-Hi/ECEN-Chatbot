@@ -121,6 +121,12 @@ class ChatResponse(BaseModel):
     sources: list[Source]
 
 
+class FeedbackRequest(BaseModel):
+    rating: str = Field(..., pattern="^(up|down)$")
+    question: str = Field(..., max_length=1000)
+    answer: str = Field(..., max_length=8000)
+
+
 class ReportRequest(BaseModel):
     description: str = Field(..., min_length=5, max_length=4000,
                             description="What went wrong, in the user's words.")
@@ -133,6 +139,45 @@ class ReportRequest(BaseModel):
 @app.get("/health")
 async def health():
     return {"status": "ok", "last_reindex": _scheduler.last_reindex}
+
+
+# In-memory usage counters (reset on instance restart; durable analytics live
+# in the AUDIT log lines in Cloud Logging).
+from collections import Counter
+_STATS: dict = {"questions": 0, "intents": Counter(), "flags": Counter(),
+                "feedback_up": 0, "feedback_down": 0, "cache_hits": 0}
+
+
+@app.post("/feedback")
+@limiter.limit(REPORT_RATE_LIMIT)
+async def feedback(request: Request, req: FeedbackRequest):
+    """Thumbs up/down on an answer → audit log + counters."""
+    import hashlib
+    import json as _j
+    if req.rating == "up":
+        _STATS["feedback_up"] += 1
+    else:
+        _STATS["feedback_down"] += 1
+    ip = _client_ip(request)
+    log.info("FEEDBACK %s", _j.dumps({
+        "rating": req.rating,
+        "ip_hash": hashlib.sha256(ip.encode()).hexdigest()[:12],
+        "question": req.question[:300],
+        "answer_preview": req.answer[:300],
+    }))
+    return {"ok": True}
+
+
+@app.get("/admin/stats")
+async def stats():
+    """Lightweight usage counters since this instance started."""
+    return {
+        "questions": _STATS["questions"],
+        "intents": dict(_STATS["intents"]),
+        "flags": dict(_STATS["flags"]),
+        "feedback": {"up": _STATS["feedback_up"], "down": _STATS["feedback_down"]},
+        "cache_hits": _STATS["cache_hits"],
+    }
 
 
 @app.post("/report-issue")
@@ -290,16 +335,48 @@ def _gate_context(chunks: list[dict]) -> list[dict]:
             if (c.get("rerank_score", 0.0) or 0.0) >= CONTEXT_MIN_SCORE]
 
 
-def _canned_stream(text: str):
-    """SSE response for canned messages (refusals, no-info) — no LLM, no sources."""
+def _canned_stream(text: str, sources: Optional[list] = None):
+    """SSE response built from a ready answer (refusals, no-info, cache hits)."""
     import json as _j
 
     async def gen():
-        yield f"event: sources\ndata: {_j.dumps([])}\n\n"
+        yield f"event: sources\ndata: {_j.dumps(sources or [])}\n\n"
         yield f"data: {text.replace(chr(10), chr(92) + 'n')}\n\n"
         yield "data: [DONE]\n\n"
 
     return StreamingResponse(gen(), media_type="text/event-stream")
+
+
+# ── Answer cache (in-memory, per instance) ───────────────────────────────────
+# Only first questions (no history) are cacheable — follow-ups depend on the
+# conversation. Durable across requests, reset on instance restart.
+import time as _time
+
+_ANSWER_CACHE: dict[str, tuple[float, str, list]] = {}
+_CACHE_TTL = float(os.getenv("ANSWER_CACHE_TTL", "3600"))
+_CACHE_MAX = 200
+
+
+def _cache_key(search_req: "ChatRequest") -> str:
+    return f"{search_req.question.strip().lower()}|{search_req.section_filter or ''}"
+
+
+def _cache_get(key: str) -> Optional[tuple[str, list]]:
+    entry = _ANSWER_CACHE.get(key)
+    if not entry:
+        return None
+    ts, answer, sources = entry
+    if _time.time() - ts > _CACHE_TTL:
+        _ANSWER_CACHE.pop(key, None)
+        return None
+    return answer, sources
+
+
+def _cache_put(key: str, answer: str, sources: list) -> None:
+    if len(_ANSWER_CACHE) >= _CACHE_MAX:
+        oldest = min(_ANSWER_CACHE, key=lambda k: _ANSWER_CACHE[k][0])
+        _ANSWER_CACHE.pop(oldest, None)
+    _ANSWER_CACHE[key] = (_time.time(), answer, sources)
 
 
 def _audit(request: Request, question: str, resolved: str, route: Optional[dict],
@@ -308,6 +385,10 @@ def _audit(request: Request, question: str, resolved: str, route: Optional[dict]
     truncated. One line per request, greppable via 'AUDIT'."""
     import hashlib
     import json as _j
+    _STATS["questions"] += 1
+    _STATS["intents"][(route or {}).get("intent") or "fallback"] += 1
+    if flagged:
+        _STATS["flags"][flagged] += 1
     ip = _client_ip(request)
     log.info("AUDIT %s", _j.dumps({
         "ip_hash": hashlib.sha256(ip.encode()).hexdigest()[:12],
@@ -481,6 +562,17 @@ async def chat_stream(request: Request, req: ChatRequest):
                _REFUSAL_TEXT, flagged="injection_llm")
         return _canned_stream(_REFUSAL_TEXT)
 
+    # Cache: identical first questions replay the stored answer (no LLM call).
+    ckey = _cache_key(search_req) if not history else None
+    if ckey:
+        hit = _cache_get(ckey)
+        if hit:
+            _STATS["cache_hits"] += 1
+            answer, cached_sources = hit
+            _audit(request, req.question, search_req.question, route,
+                   cached_sources, answer, flagged="cache_hit")
+            return _canned_stream(answer, cached_sources)
+
     chunks = _gate_context(await _prepare_chunks(search_req, route))
     if not chunks:
         _audit(request, req.question, search_req.question, route, [],
@@ -551,6 +643,8 @@ async def chat_stream(request: Request, req: ChatRequest):
             yield f"data: {answer.replace(chr(10), chr(92) + 'n')}\n\n"
 
         yield "data: [DONE]\n\n"
+        if ckey and emitted > 0 and answer_acc:
+            _cache_put(ckey, answer_acc, sources)
         _audit(request, req.question, search_req.question, route, sources, answer_acc)
 
     return StreamingResponse(event_stream(), media_type="text/event-stream")

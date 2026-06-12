@@ -153,6 +153,7 @@ def ingest(diff_mode: bool = False) -> None:
     scrub_pii(pages)
     log.info("Chunking...")
     chunks = chunk_docs(pages)
+    all_chunks = chunks  # full crawl result, pre-diff — used for stale pruning
     log.info(f"Produced {len(chunks)} chunks.")
 
     if diff_mode:
@@ -176,6 +177,7 @@ def ingest(diff_mode: bool = False) -> None:
 
     if not chunks:
         log.info("Nothing to upsert.")
+        prune_stale(conn, all_chunks)
         conn.close()
         return
 
@@ -207,8 +209,35 @@ def ingest(diff_mode: bool = False) -> None:
                 """, (row_id, c.chunk_id, c.url, c.title, c.section,
                       c.text, c.content_hash, now, vec))
     conn.commit()
+    prune_stale(conn, all_chunks)
     conn.close()
     log.info("Ingest complete.")
+
+
+def prune_stale(conn, all_chunks) -> None:
+    """Remove DB chunks whose chunk_id no longer exists in the current crawl
+    (deleted pages, restructured content). Guard: a partial crawl (network
+    issues, MAX_PAGES cut) must not wipe valid data — skip when more than half
+    the DB would vanish, unless FORCE_INGEST=1."""
+    current_ids = {c.chunk_id for c in all_chunks}
+    if not current_ids:
+        return
+    with conn.cursor() as cur:
+        cur.execute("SELECT chunk_id FROM ecen_docs;")
+        db_ids = {row[0] for row in cur.fetchall()}
+    stale = db_ids - current_ids
+    if not stale:
+        return
+    stale_ratio = len(stale) / max(1, len(db_ids))
+    if stale_ratio > 0.5 and not os.getenv("FORCE_INGEST"):
+        log.warning("Prune skipped: %d stale chunks (%.0f%% of DB) — crawl may "
+                    "be incomplete. Re-run with FORCE_INGEST=1 to prune.",
+                    len(stale), stale_ratio * 100)
+        return
+    with conn.cursor() as cur:
+        cur.execute("DELETE FROM ecen_docs WHERE chunk_id = ANY(%s);", (list(stale),))
+    conn.commit()
+    log.info("Pruned %d stale chunks no longer present on the site.", len(stale))
 
 
 if __name__ == "__main__":

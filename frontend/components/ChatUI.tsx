@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useRef, useEffect, FormEvent } from "react";
-import { Send, Square, User, ExternalLink, RefreshCw, Flag, X, Check } from "lucide-react";
+import { Send, Square, User, ExternalLink, RefreshCw, Flag, X, Check, ThumbsUp, ThumbsDown } from "lucide-react";
 
 /** EIRA — ECE Information & Resource Assistant — illustrated avatar (frontend/public/ellie-avatar.png). */
 function EllieAvatar({ size = 30 }: { size?: number }) {
@@ -18,7 +18,17 @@ function EllieAvatar({ size = 30 }: { size?: number }) {
 import ReactMarkdown from "react-markdown";
 
 interface Source { url: string; title: string; section: string; }
-interface Message { role: "user" | "assistant"; content: string; sources?: Source[]; loading?: boolean; }
+interface Message { role: "user" | "assistant"; content: string; sources?: Source[]; suggestions?: string[]; feedback?: "up" | "down"; loading?: boolean; }
+
+/** Split the raw streamed answer into display text + suggested follow-ups. */
+function parseAnswer(raw: string): { display: string; suggestions?: string[] } {
+  const idx = raw.indexOf("|||SUGGEST");
+  if (idx === -1) return { display: raw };
+  const display = raw.slice(0, idx).trimEnd();
+  const suggestions = raw.slice(idx + 10).replace(/^:?\s*/, "")
+    .split("|").map(s => s.trim()).filter(Boolean).slice(0, 3);
+  return { display, suggestions: suggestions.length ? suggestions : undefined };
+}
 
 const MAROON = "#500000";
 const BG = "#ffffff";
@@ -180,7 +190,8 @@ export default function ChatUI() {
           if (data === "[DONE]") break;
           try { const p = JSON.parse(data); if (Array.isArray(p)) { sources = p; continue; } } catch {}
           answer += data;
-          setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: answer, sources, loading: false }; return u; });
+          const parsed = parseAnswer(answer);
+          setMessages(prev => { const u = [...prev]; u[u.length - 1] = { role: "assistant", content: parsed.display, sources, suggestions: parsed.suggestions, loading: false }; return u; });
         }
       }
     } catch {
@@ -196,6 +207,18 @@ export default function ChatUI() {
   }
 
   function stopStreaming() { abortRef.current?.abort(); }
+
+  function sendFeedback(i: number, rating: "up" | "down") {
+    const msg = messages[i];
+    if (!msg || msg.feedback) return;
+    const q = [...messages.slice(0, i)].reverse().find(m => m.role === "user")?.content ?? "";
+    setMessages(prev => { const u = [...prev]; u[i] = { ...u[i], feedback: rating }; return u; });
+    fetch("/api/feedback", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ rating, question: q.slice(0, 1000), answer: msg.content.slice(0, 8000) }),
+    }).catch(() => {});
+  }
 
   function onSubmit(e: FormEvent) { e.preventDefault(); send(input.trim()); }
 
@@ -281,6 +304,30 @@ export default function ChatUI() {
                     </div>
                   )}
                 </div>
+                {/* Feedback + follow-up chips, once the answer is complete */}
+                {msg.role === "assistant" && !msg.loading && msg.content && !(streaming && i === messages.length - 1) && (
+                  <div style={{ display: "flex", gap: "6px", marginTop: "6px", paddingLeft: "4px", alignItems: "center" }}>
+                    <button onClick={() => sendFeedback(i, "up")} title="Good answer" disabled={!!msg.feedback}
+                      style={{ background: "none", border: "none", cursor: msg.feedback ? "default" : "pointer", color: msg.feedback === "up" ? "#15803d" : "#9ca3af", padding: "2px" }}>
+                      <ThumbsUp size={14} />
+                    </button>
+                    <button onClick={() => sendFeedback(i, "down")} title="Bad answer" disabled={!!msg.feedback}
+                      style={{ background: "none", border: "none", cursor: msg.feedback ? "default" : "pointer", color: msg.feedback === "down" ? "#b91c1c" : "#9ca3af", padding: "2px" }}>
+                      <ThumbsDown size={14} />
+                    </button>
+                    {msg.feedback && <span style={{ fontSize: "0.7rem", color: "#9ca3af" }}>Thanks for the feedback!</span>}
+                  </div>
+                )}
+                {msg.suggestions && msg.suggestions.length > 0 && i === messages.length - 1 && !streaming && (
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: "6px", marginTop: "10px" }}>
+                    {msg.suggestions.map((s, si) => (
+                      <button key={si} onClick={() => send(s)}
+                        style={{ padding: "6px 12px", borderRadius: "999px", backgroundColor: BG, border: `1px solid ${BORDER}`, color: MAROON, fontSize: "0.75rem", cursor: "pointer", textAlign: "left" }}>
+                        {s}
+                      </button>
+                    ))}
+                  </div>
+                )}
                 {/* Sources render only after the answer finishes streaming */}
                 {msg.sources && msg.sources.length > 0 && !(streaming && i === messages.length - 1) && (
                   <div style={{ marginTop: "8px", display: "flex", flexDirection: "column", gap: "4px" }}>

@@ -24,12 +24,18 @@ log = logging.getLogger(__name__)
 
 BASE_URL = os.getenv("TARGET_URL", "https://engineering.tamu.edu/electrical/index.html")
 CRAWL_DELAY = float(os.getenv("CRAWL_DELAY_SECONDS", "1"))
-MAX_PAGES = int(os.getenv("MAX_PAGES", "500"))
+MAX_PAGES = int(os.getenv("MAX_PAGES", "700"))
 
 ALLOWED_DOMAINS = {
     "engineering.tamu.edu",
     "calendar.tamu.edu",
+    "news.engineering.tamu.edu",
 }
+
+# On the news site, only the ECEN tag listing is allowed unconditionally;
+# individual articles are whitelisted as they're discovered on those listing
+# pages (so we never crawl other departments' news).
+_NEWS_ARTICLE_WHITELIST: set[str] = set()
 
 SKIP_EXTENSIONS = {".pdf", ".jpg", ".jpeg", ".png", ".gif", ".svg", ".zip", ".doc", ".docx"}
 
@@ -49,6 +55,7 @@ EXTRA_SEEDS = [
     "https://engineering.tamu.edu/ce/index.html",
     "https://engineering.tamu.edu/academics/eh/departments/ecen-track/index.html",
     "https://engineering.tamu.edu/academics/global/opportunities-abroad/departments.html",
+    "https://news.engineering.tamu.edu/tag/ecen/",
 ]
 
 HEADERS = {
@@ -107,6 +114,12 @@ def _is_allowed(url: str) -> bool:
     # academics subtrees (computer engineering, engineering honors, global programs)
     if parsed.netloc == "engineering.tamu.edu" and not path.startswith(ALLOWED_ENG_PREFIXES):
         return False
+    # News site: ECEN tag listings always; articles only when whitelisted
+    # (i.e. linked from an ECEN tag page).
+    if parsed.netloc == "news.engineering.tamu.edu":
+        if path.startswith("/tag/ecen"):
+            return True
+        return url.split("#")[0].rstrip("/") in _NEWS_ARTICLE_WHITELIST
     return True
 
 
@@ -248,8 +261,12 @@ def crawl() -> list[PageDoc]:
         # nav/header/footer in-place, which would silently drop any links living in
         # site navigation (e.g. the "Patents and Startups" sidebar link on every
         # research page) and prevent them from ever being queued.
+        on_ecen_tag_page = "news.engineering.tamu.edu/tag/ecen" in url
         for a in soup.find_all("a", href=True):
             href = urljoin(url, a["href"]).split("#")[0].rstrip("/")
+            # Articles linked from an ECEN tag listing are ECEN news → allow.
+            if on_ecen_tag_page and "news.engineering.tamu.edu/news/" in href:
+                _NEWS_ARTICLE_WHITELIST.add(href)
             if href not in visited and _is_allowed(href):
                 queue.append(href)
 
