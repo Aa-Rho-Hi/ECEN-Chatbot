@@ -140,7 +140,7 @@ export default function ChatUI() {
     const history = messages
       .filter(m => !m.loading && m.content &&
         m.content !== "Sorry, something went wrong. Please try again.")
-      .slice(-6)
+      .slice(-10)
       .map(m => ({ role: m.role, content: m.content.slice(0, 1500) }));
     setMessages(prev => [...prev,
       { role: "user", content: question },

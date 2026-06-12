@@ -43,6 +43,12 @@ SYSTEM_PROMPT = (
     "clearly framing it as general perspective, not department policy. "
     "Be concrete, practical, and helpful.\n\n"
 
+    "PERSONALIZE: Track what the user has told you about themselves earlier in the conversation — "
+    "interests (e.g. 'I'm interested in security'), background, degree level, goals — and tailor every "
+    "subsequent answer to it. If they said they're interested in security and later ask about programs, "
+    "courses, faculty, or anything else, relate the answer back to security (which courses/faculty/labs "
+    "fit that interest) instead of giving a generic list. Drop this only if they clearly change topic.\n\n"
+
     "Style: conversational and warm. For short factual answers, reply in natural prose (1-3 sentences) "
     "with no headers. Use headers and bullet points only when listing many items or comparing options. "
     "When context contains a list (people, degrees, programs, research areas, courses), include EVERY item — never truncate or summarize a list. "
@@ -179,11 +185,11 @@ async def _stream_once(messages: list[dict]) -> tuple[str, str]:
 
 
 def _history_messages(history: list[dict] | None) -> list[dict]:
-    """Sanitized prior conversation turns for the LLM (last 6, truncated)."""
+    """Sanitized prior conversation turns for the LLM (last 10, truncated)."""
     if not history:
         return []
     out = []
-    for m in history[-6:]:
+    for m in history[-10:]:
         role = m.get("role")
         content = (m.get("content") or "").strip()
         if role in ("user", "assistant") and content:
