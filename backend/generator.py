@@ -178,7 +178,66 @@ async def _stream_once(messages: list[dict]) -> tuple[str, str]:
     return "".join(parts), finish_reason
 
 
-async def generate(question: str, chunks: list[dict]) -> str:
+def _history_messages(history: list[dict] | None) -> list[dict]:
+    """Sanitized prior conversation turns for the LLM (last 6, truncated)."""
+    if not history:
+        return []
+    out = []
+    for m in history[-6:]:
+        role = m.get("role")
+        content = (m.get("content") or "").strip()
+        if role in ("user", "assistant") and content:
+            out.append({"role": role, "content": content[:1500]})
+    return out
+
+
+REWRITE_PROMPT = (
+    "Rewrite the user's latest question as a single, fully self-contained question "
+    "about the TAMU Electrical & Computer Engineering department. Resolve every "
+    "pronoun and implicit reference ('he', 'that program', 'what about online?') "
+    "using the conversation. Keep it short and keyword-rich for search. "
+    "If the question is already self-contained, return it UNCHANGED. "
+    "Return ONLY the rewritten question, nothing else."
+)
+
+
+async def rewrite_standalone(question: str, history: list[dict] | None) -> str:
+    """Condense a follow-up question + conversation into a standalone search
+    query for retrieval. Falls back to the original question on any failure."""
+    hist = _history_messages(history)
+    if not hist:
+        return question
+    convo = "\n".join(
+        f"{'User' if m['role'] == 'user' else 'Assistant'}: {m['content'][:800]}"
+        for m in hist
+    )
+    try:
+        client = _get_client()
+        stream = await client.chat.completions.create(
+            model=TAMU_MODEL,
+            messages=[
+                {"role": "system", "content": REWRITE_PROMPT},
+                {"role": "user", "content": f"Conversation:\n{convo}\n\nLatest question: {question}"},
+            ],
+            temperature=0.0,
+            max_tokens=300,
+            stream=True,
+        )
+        out = ""
+        async for chunk in stream:
+            delta = chunk.choices[0].delta.content
+            if delta:
+                out += delta
+        out = out.strip().strip('"').strip()
+        if out:
+            log.info("Query rewrite: %r -> %r", question, out)
+            return out
+    except Exception as e:  # noqa: BLE001
+        log.warning("Query rewrite failed (%s); using original question", e)
+    return question
+
+
+async def generate(question: str, chunks: list[dict], history: list[dict] | None = None) -> str:
     """Non-streaming generation via raw httpx SSE (TAMU API requires streaming).
 
     Auto-continues when the model stops because it hit the token cap
@@ -189,6 +248,7 @@ async def generate(question: str, chunks: list[dict]) -> str:
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *_history_messages(history),
         {"role": "user", "content": user_msg},
     ]
 
@@ -236,7 +296,8 @@ def _parse_sse_content(raw: str) -> str:
     return "".join(content).strip()
 
 
-async def generate_stream(question: str, chunks: list[dict]) -> AsyncIterator[str]:
+async def generate_stream(question: str, chunks: list[dict],
+                          history: list[dict] | None = None) -> AsyncIterator[str]:
     """Streaming generation. Yields real LLM delta tokens as they arrive.
 
     Auto-continues on finish_reason == "length" so long answers don't cut off.
@@ -247,6 +308,7 @@ async def generate_stream(question: str, chunks: list[dict]) -> AsyncIterator[st
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
+        *_history_messages(history),
         {"role": "user", "content": user_msg},
     ]
 

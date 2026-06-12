@@ -136,6 +136,12 @@ export default function ChatUI() {
   async function send(question: string) {
     if (!question.trim() || streaming) return;
     setInput("");
+    // Last 3 turns (6 messages) so the backend can resolve follow-up questions.
+    const history = messages
+      .filter(m => !m.loading && m.content &&
+        m.content !== "Sorry, something went wrong. Please try again.")
+      .slice(-6)
+      .map(m => ({ role: m.role, content: m.content.slice(0, 1500) }));
     setMessages(prev => [...prev,
       { role: "user", content: question },
       { role: "assistant", content: "", loading: true },
@@ -147,7 +153,11 @@ export default function ChatUI() {
       const res = await fetch("/api/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ question, section_filter: section || undefined }),
+        body: JSON.stringify({
+          question,
+          section_filter: section || undefined,
+          history: history.length ? history : undefined,
+        }),
         signal: controller.signal,
       });
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);

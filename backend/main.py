@@ -23,7 +23,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
-from generator import generate, generate_stream, generate as _generate_full
+from generator import generate, generate_stream, rewrite_standalone, generate as _generate_full
 from retriever import retrieve_async, _people_area_topic, _people_by_area
 from graph_retriever import (
     graph_query, build_area_roster, is_full_faculty_query, build_full_faculty_roster,
@@ -72,12 +72,21 @@ app.add_middleware(
 
 
 # ── Request / Response models ─────────────────────────────────────────────────
+class HistoryTurn(BaseModel):
+    role: str = Field(..., pattern="^(user|assistant)$")
+    content: str = Field(..., max_length=4000)
+
+
 class ChatRequest(BaseModel):
     question: str = Field(..., min_length=3, max_length=1000, example="Who are the AI/ML faculty?")
     section_filter: Optional[str] = Field(
         None,
         description="Restrict retrieval to a section: people | research | academics | admissions | news | events | about",
         example="research",
+    )
+    history: Optional[list[HistoryTurn]] = Field(
+        None, max_length=10,
+        description="Recent conversation turns (oldest first) so follow-up questions can be understood.",
     )
 
 
@@ -280,10 +289,32 @@ async def _prepare_chunks(req: "ChatRequest") -> list[dict]:
     return chunks
 
 
+def _history_dicts(req: "ChatRequest") -> list[dict]:
+    return [{"role": t.role, "content": t.content} for t in (req.history or [])]
+
+
+async def _resolve_question(req: "ChatRequest") -> "ChatRequest":
+    """For follow-up questions, rewrite into a standalone query for RETRIEVAL.
+
+    The creator check runs on the original phrasing, and generation later uses
+    the original question + history — only the search query is rewritten.
+    """
+    history = _history_dicts(req)
+    if not history or _is_creator_question(req.question):
+        return req
+    rewritten = await rewrite_standalone(req.question, history)
+    if rewritten == req.question:
+        return req
+    return ChatRequest(question=rewritten[:1000], section_filter=req.section_filter,
+                       history=req.history)
+
+
 @app.post("/chat", summary="Streaming chat (Server-Sent Events)")
 async def chat_stream(req: ChatRequest):
     """Returns a streaming text/event-stream response."""
-    chunks = await _prepare_chunks(req)
+    history = _history_dicts(req)
+    search_req = await _resolve_question(req)
+    chunks = await _prepare_chunks(search_req)
     if not chunks:
         raise HTTPException(status_code=404, detail="No relevant content found for your question.")
 
@@ -303,7 +334,7 @@ async def chat_stream(req: ChatRequest):
         # length-truncation handled inside generate_stream).
         emitted = 0
         try:
-            async for delta in generate_stream(req.question, chunks):
+            async for delta in generate_stream(req.question, chunks, history=history):
                 if not delta:
                     continue
                 emitted += len(delta)
@@ -317,7 +348,7 @@ async def chat_stream(req: ChatRequest):
         # If streaming produced nothing, fall back to a buffered generation
         # (and retry with a single chunk) so the user never sees an empty reply.
         if emitted == 0:
-            answer = await _generate_full(req.question, chunks)
+            answer = await _generate_full(req.question, chunks, history=history)
             if not answer and len(chunks) > 1:
                 log.warning("Empty answer with %d chunks, retrying with 1 chunk", len(chunks))
                 answer = await _generate_full(req.question, chunks[:1])
@@ -334,11 +365,13 @@ async def chat_stream(req: ChatRequest):
 @app.post("/chat/sync", response_model=ChatResponse, summary="Synchronous chat")
 async def chat_sync(req: ChatRequest):
     """Returns a complete JSON response (no streaming)."""
-    chunks = await _prepare_chunks(req)
+    history = _history_dicts(req)
+    search_req = await _resolve_question(req)
+    chunks = await _prepare_chunks(search_req)
     if not chunks:
         raise HTTPException(status_code=404, detail="No relevant content found for your question.")
 
-    answer = await generate(req.question, chunks)
+    answer = await generate(req.question, chunks, history=history)
     sources = [Source(url=c["url"], title=c["title"], section=c["section"])
                for c in _select_sources(chunks)]
     return ChatResponse(answer=answer, sources=sources)
