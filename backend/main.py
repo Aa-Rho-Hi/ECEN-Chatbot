@@ -150,13 +150,21 @@ _ROSTER_URLS = {"research-area-roster", "faculty-roster"}
 # Max sources to cite on the normal retrieval path (we feed more chunks to the
 # LLM for answer completeness, but only cite the few most relevant).
 MAX_SOURCES = 6
+# Cross-encoder relevance gate for CITED sources. ms-marco cross-encoder scores
+# are logits (~ -11 weakly relevant … +11 highly relevant); chunks below this
+# only padded the top-k and shouldn't be shown to users as "sources". The LLM
+# context is NOT filtered — only what we display. Tune via env without deploy.
+SOURCE_MIN_SCORE = float(os.getenv("SOURCE_MIN_SCORE", "0"))
+# Always cite at least this many (best-available) sources even if all scores
+# are below the gate, so answers never appear unsourced.
+MIN_SOURCES = 2
 
 
 def _select_sources(chunks: list[dict]) -> list[dict]:
     """De-duplicate by URL (keep the highest-scoring chunk per page), drop
     synthetic chunks, and — on the normal retrieval path — keep only the most
-    relevant few. Roster paths already supply a curated source set, so keep it
-    whole."""
+    relevant few above the cross-encoder relevance gate. Roster paths already
+    supply a curated source set, so keep it whole."""
     best: dict[str, dict] = {}
     for c in chunks:
         url = c["url"]
@@ -169,7 +177,11 @@ def _select_sources(chunks: list[dict]) -> list[dict]:
                      key=lambda c: c.get("rerank_score", 0.0) or 0.0, reverse=True)
     if any(c["url"] in _ROSTER_URLS for c in chunks):
         return ordered
-    return ordered[:MAX_SOURCES]
+    relevant = [c for c in ordered
+                if (c.get("rerank_score", 0.0) or 0.0) >= SOURCE_MIN_SCORE]
+    if len(relevant) < MIN_SOURCES:
+        relevant = ordered[:MIN_SOURCES]
+    return relevant[:MAX_SOURCES]
 
 
 import re as _re
