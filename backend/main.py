@@ -184,15 +184,16 @@ _CREATOR_RE = _re.compile(
 )
 
 _CREATOR_CHUNK = {
-    "url": "about:creator",
-    "title": "About this chatbot",
+    "url": "https://www.linkedin.com/in/aarohi-mohrir/",
+    "title": "Aarohi Mohrir — let's connect on LinkedIn",
     "section": "about",
     "rerank_score": 10.0,
     "text": (
         "This assistant is a Retrieval-Augmented Generation (RAG) system over the "
         "TAMU ECE website, designed and built end to end by Aarohi Mohrir, a "
         "Master's student in Computer Science — the crawler, the hybrid retrieval "
-        "pipeline, the knowledge graph, and the cloud deployment are all her work."
+        "pipeline, the knowledge graph, and the cloud deployment are all her work. "
+        "Connect with her on LinkedIn: https://www.linkedin.com/in/aarohi-mohrir/"
     ),
 }
 
