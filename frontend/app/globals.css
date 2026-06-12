@@ -24,7 +24,6 @@ html, body, #__next {
 
 /* ── Mobile responsiveness ─────────────────────────────────────────────── */
 @media (max-width: 640px) {
-  .landing-title { font-size: 1.5rem !important; text-align: center; padding: 0 1.25rem; }
   .chat-header { padding: 10px 12px !important; }
   .chat-scroll { padding: 16px 10px !important; }
   .bubble-col { max-width: 88% !important; }
@@ -35,4 +34,12 @@ html, body, #__next {
 
 @media (max-width: 640px) {
   .header-tagline { display: none; }
+}
+
+/* Lock the app to the visible viewport: header and input bar stay fixed,
+   only the messages area scrolls. 100dvh tracks mobile URL-bar/keyboard. */
+html, body { overflow: hidden; overscroll-behavior: none; }
+.app-viewport {
+  height: 100vh;
+  height: 100dvh;
 }

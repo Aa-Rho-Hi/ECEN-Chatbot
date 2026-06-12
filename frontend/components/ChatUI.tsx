@@ -186,10 +186,10 @@ export default function ChatUI() {
 
   /* ── LANDING ── */
   if (!hasMessages) return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100vh", width: "100%", backgroundColor: BG, fontFamily: "system-ui, sans-serif" }}>
+    <div className="app-viewport" style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", width: "100%", backgroundColor: BG, fontFamily: "system-ui, sans-serif" }}>
 
       <div style={{ marginBottom: "1.25rem" }}><EllieAvatar size={96} /></div>
-      <h1 className="landing-title" style={{ color: "#111111", fontSize: "2.25rem", fontWeight: 400, marginBottom: "0.5rem", letterSpacing: "-0.02em" }}>
+      <h1 className="landing-title" style={{ color: "#111111", fontSize: "clamp(1.4rem, 6vw, 2.25rem)", fontWeight: 400, margin: "0 0 0.5rem", letterSpacing: "-0.02em", textAlign: "center", maxWidth: "100%", padding: "0 1rem", boxSizing: "border-box" }}>
         Howdy, I'm EIRA!
       </h1>
       <p style={{ color: "#6b7280", fontSize: "1rem", margin: "0 0 2rem", textAlign: "center", padding: "0 1rem" }}>
@@ -230,7 +230,7 @@ export default function ChatUI() {
 
   /* ── CHAT ── */
   return (
-    <div style={{ display: "flex", flexDirection: "column", height: "100vh", backgroundColor: BG, fontFamily: "system-ui, sans-serif" }}>
+    <div className="app-viewport" style={{ display: "flex", flexDirection: "column", backgroundColor: BG, fontFamily: "system-ui, sans-serif" }}>
 
       {/* Header */}
       <div className="chat-header" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "12px 24px", borderBottom: `1px solid ${BORDER}`, flexShrink: 0 }}>
