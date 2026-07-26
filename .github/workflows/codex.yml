@@ -53,10 +53,15 @@ jobs:
         run: python .github/scripts/implement.py
 
       # ── Gate 1: Python syntax ──────────────────────────────────────────────
+      # Covers scripts/ and tests/ as well as backend/ and crawler/. The
+      # narrower gate let scripts/reingest_urls.py sit un-importable since the
+      # initial commit: a mojibake repair table had two keys corrupted into
+      # bare ASCII quotes, making the whole module a SyntaxError that nothing
+      # ever compiled.
       - name: Gate 1 — py_compile
         id: compile
         run: |
-          if python -m py_compile backend/*.py crawler/*.py 2>&1; then
+          if python -m py_compile backend/*.py crawler/*.py scripts/*.py tests/*.py 2>&1; then
             echo "ok=true"  >> "$GITHUB_OUTPUT"
           else
             echo "ok=false" >> "$GITHUB_OUTPUT"
