@@ -495,12 +495,37 @@ def _run_metrics(case: dict, answer: str, context: list[str]) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+HISTORY_DIR = os.path.join(REPORT_DIR, "history")
+
+
+def _archive_slug(meta: dict) -> str:
+    """Stable, sortable filename for one run: when + what it targeted."""
+    when = meta.get("when", "").replace("-", "").replace(":", "").replace(" ", "-")
+    base = meta.get("base_url", "")
+    if "localhost" in base or "127.0.0.1" in base:
+        target = "local"
+    elif "run.app" in base:
+        target = "prod"
+    else:
+        target = "other"
+    return f"{when or 'unknown'}-{target}"
+
+
 def _write_report(results: list[dict], meta: dict) -> str:
     os.makedirs(REPORT_DIR, exist_ok=True)
+    os.makedirs(HISTORY_DIR, exist_ok=True)
     json_path = os.path.join(REPORT_DIR, "deepeval_report.json")
     md_path = os.path.join(REPORT_DIR, "deepeval_report.md")
 
     with open(json_path, "w") as f:
+        json.dump({"meta": meta, "results": results}, f, indent=2)
+
+    # Also keep an immutable copy. deepeval_report.json used to be overwritten
+    # by every run, so the moment you evaluated a branch you destroyed the only
+    # record of what the previous build scored — which is precisely what you
+    # need to answer "did quality shift?". Archived runs feed --compare.
+    slug = _archive_slug(meta)
+    with open(os.path.join(HISTORY_DIR, f"{slug}.json"), "w") as f:
         json.dump({"meta": meta, "results": results}, f, indent=2)
 
     passed = [r for r in results if r["passed"]]
@@ -544,10 +569,109 @@ def _write_report(results: list[dict], meta: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Run-to-run comparison
+# ---------------------------------------------------------------------------
+# GEval scores jitter run-to-run (see the SOFT_THRESHOLD note above), so a raw
+# score delta is noise unless it's large. Only movement past this is reported as
+# a score shift; pass/fail flips are always reported regardless of magnitude.
+SCORE_DRIFT_EPSILON = float(os.getenv("EVAL_DRIFT_EPSILON", "0.15"))
+
+
+def _load_run(path: str) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def _by_id(run: dict) -> dict[str, dict]:
+    return {r["id"]: r for r in run.get("results", [])}
+
+
+def compare_runs(baseline_path: str, candidate_path: str) -> int:
+    """Diff two report JSONs case-by-case. Returns a shell exit code:
+    0 = no regressions, 1 = at least one case regressed.
+
+    Answers "did quality shift?" directly, instead of leaving you to eyeball two
+    markdown tables. Cases present in only one run are called out rather than
+    silently ignored — a filtered run (--fast/--tag) compared against a full one
+    would otherwise look like a pile of fixes or regressions.
+    """
+    base, cand = _load_run(baseline_path), _load_run(candidate_path)
+    b, c = _by_id(base), _by_id(cand)
+
+    shared = sorted(set(b) & set(c))
+    only_base = sorted(set(b) - set(c))
+    only_cand = sorted(set(c) - set(b))
+
+    regressed = [i for i in shared if b[i]["passed"] and not c[i]["passed"]]
+    fixed = [i for i in shared if not b[i]["passed"] and c[i]["passed"]]
+
+    print("=" * 70)
+    print("DeepEval run comparison")
+    print("=" * 70)
+    print(f"  baseline : {baseline_path}")
+    print(f"             {base.get('meta', {}).get('when', '?')} → "
+          f"{base.get('meta', {}).get('base_url', '?')}")
+    print(f"  candidate: {candidate_path}")
+    print(f"             {cand.get('meta', {}).get('when', '?')} → "
+          f"{cand.get('meta', {}).get('base_url', '?')}")
+    print(f"  cases compared: {len(shared)}")
+    if only_base:
+        print(f"  ! only in baseline ({len(only_base)}): {', '.join(only_base)}")
+    if only_cand:
+        print(f"  ! only in candidate ({len(only_cand)}): {', '.join(only_cand)}")
+    print()
+
+    if regressed:
+        print(f"REGRESSED ({len(regressed)}) — passed before, fails now:")
+        for i in regressed:
+            fails = c[i]["deterministic_failures"] + [
+                f"{m['metric']} {m['score']}" for m in c[i]["metrics"]
+                if not m["passed"]]
+            print(f"  ✗ {i}: {c[i]['question'][:60]}")
+            for f_ in fails:
+                print(f"      {f_}")
+        print()
+    else:
+        print("REGRESSED (0) — nothing that passed before is failing now.\n")
+
+    if fixed:
+        print(f"FIXED ({len(fixed)}):")
+        for i in fixed:
+            print(f"  ✓ {i}: {c[i]['question'][:60]}")
+        print()
+
+    # Score drift on cases whose verdict didn't change — an early warning that
+    # something is degrading before it crosses a threshold.
+    drift = []
+    for i in shared:
+        bm = {m["metric"]: m["score"] for m in b[i]["metrics"]}
+        for m in c[i]["metrics"]:
+            if m["metric"] not in bm:
+                continue
+            delta = m["score"] - bm[m["metric"]]
+            if abs(delta) >= SCORE_DRIFT_EPSILON:
+                drift.append((i, m["metric"], bm[m["metric"]], m["score"], delta))
+    if drift:
+        print(f"SCORE DRIFT (|Δ| ≥ {SCORE_DRIFT_EPSILON}, verdict unchanged):")
+        for i, metric, was, now, delta in sorted(drift, key=lambda d: d[4]):
+            print(f"  {'↓' if delta < 0 else '↑'} {i} {metric}: "
+                  f"{was:.2f} → {now:.2f} ({delta:+.2f})")
+        print()
+
+    bp = sum(1 for i in shared if b[i]["passed"])
+    cp = sum(1 for i in shared if c[i]["passed"])
+    print(f"SUMMARY: {bp}/{len(shared)} → {cp}/{len(shared)} "
+          f"({cp - bp:+d} on shared cases)")
+    print("=" * 70)
+    return 1 if regressed else 0
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
-        delay: float = DEFAULT_DELAY, no_llm: bool = False) -> int:
+        delay: float = DEFAULT_DELAY, no_llm: bool = False,
+        baseline: Optional[str] = None) -> int:
     if not no_llm and not os.getenv("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set. Export it, or pass --no-llm for "
               "deterministic-only checks.", file=sys.stderr)
@@ -610,6 +734,11 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
     failed = sum(1 for r in results if not r["passed"])
     print(f"\n{len(results) - failed} passed, {failed} failed out of {len(results)}")
     print(f"Report: {md_path}")
+    print(f"Archived: {os.path.join(HISTORY_DIR, _archive_slug(meta) + '.json')}")
+
+    if baseline:
+        print()
+        compare_runs(baseline, os.path.join(REPORT_DIR, "deepeval_report.json"))
     return 1 if failed else 0
 
 
@@ -622,6 +751,16 @@ if __name__ == "__main__":
                         help=f"Seconds between requests (default {DEFAULT_DELAY}; 0 locally)")
     parser.add_argument("--no-llm", action="store_true",
                         help="Deterministic keyword checks only (no judge, no API key)")
+    parser.add_argument("--baseline", metavar="REPORT.json",
+                        help="After the run, diff it against this archived report "
+                             "(see eval_reports/history/)")
+    parser.add_argument("--compare", nargs=2, metavar=("BASELINE.json", "CANDIDATE.json"),
+                        help="Compare two existing reports and exit (runs no cases)")
     args = parser.parse_args()
+
+    if args.compare:
+        sys.exit(compare_runs(*args.compare))
+
     sys.exit(run(priority_filter="P0" if args.fast else None,
-                 tag_filter=args.tag, delay=args.delay, no_llm=args.no_llm))
+                 tag_filter=args.tag, delay=args.delay, no_llm=args.no_llm,
+                 baseline=args.baseline))

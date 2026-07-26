@@ -272,7 +272,34 @@ penalized), **Faithfulness** (answer vs retrieved context; needs `EVAL_MODE=1`
 so `/chat/sync` returns context), **Scope & Hallucination Discipline**.
 
 Reports land in `eval_reports/deepeval_report.md` + `.json` (score + judge's
-written reason per case; overwritten each run; gitignored).
+written reason per case; gitignored). `deepeval_report.*` is overwritten each
+run, but **every run is also archived** to `eval_reports/history/<when>-<target>.json`
+— so evaluating a branch no longer destroys the record of what the previous
+build scored.
+
+#### Comparing two runs (use this to clear a branch)
+
+```bash
+# run the branch and diff it against a saved baseline in one step
+python scripts/deepeval_eval.py --delay 0 \
+    --baseline eval_reports/history/20260706-125011-prod.json
+
+# or diff two existing reports without re-running anything
+python scripts/deepeval_eval.py --compare BASELINE.json CANDIDATE.json
+```
+
+Output separates **REGRESSED** (passed before, fails now — the merge blocker;
+exit code 1) from **FIXED**, and lists **SCORE DRIFT** for cases whose verdict
+didn't change but whose judge score moved by ≥ `EVAL_DRIFT_EPSILON` (0.15) —
+early warning that something is sliding toward a threshold. Cases present in
+only one of the two runs are called out explicitly, so a filtered run
+(`--fast` / `--tag`) diffed against a full one can't masquerade as a clean
+result.
+
+> Compare against a baseline collected the **same way**. The Jul 6 baseline in
+> `history/` is 8 extended cases against *prod*; a full 60-case local run isn't
+> comparable to it. For a real branch check, capture a baseline from `main`
+> locally first, then run the branch.
 
 Judge calibration notes (learned the hard way): GEval scores jitter between
 runs, so GEval metrics use `EVAL_SOFT_THRESHOLD` (default 0.55 — observed
