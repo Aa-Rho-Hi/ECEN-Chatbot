@@ -530,9 +530,20 @@ def _write_report(results: list[dict], meta: dict) -> str:
 
     passed = [r for r in results if r["passed"]]
     failed = [r for r in results if not r["passed"]]
-    lines = [
-        "# DeepEval regression report",
-        "",
+    lines = ["# DeepEval regression report", ""]
+    if meta.get("invalid"):
+        lines += [
+            "> ## ⚠️ THIS RUN IS NOT VALID",
+            ">",
+            f"> The backend failed on {meta.get('backend_errors')} of "
+            f"{meta.get('cases_attempted')} attempted cases"
+            + (" and the run was aborted early." if meta.get("aborted") else "."),
+            "> These results describe a **backend outage**, not answer quality.",
+            "> Do not compare against them and do not treat them as regressions.",
+            "> Check `curl -s localhost:8000/health/deep`, fix, and re-run.",
+            "",
+        ]
+    lines += [
         f"- **When:** {meta['when']}",
         f"- **Target:** {meta['base_url']}",
         f"- **Judge:** {meta['judge_model']} (threshold {meta['threshold']})"
@@ -576,6 +587,15 @@ def _write_report(results: list[dict], meta: dict) -> str:
 # a score shift; pass/fail flips are always reported regardless of magnitude.
 SCORE_DRIFT_EPSILON = float(os.getenv("EVAL_DRIFT_EPSILON", "0.15"))
 
+# Stop the run after this many consecutive backend errors. A dead database or a
+# down LLM gateway fails every remaining case identically, so continuing only
+# spends judge tokens to produce a report that misattributes an outage to answer
+# quality. 0 disables the guard.
+ABORT_AFTER_ERRORS = int(os.getenv("EVAL_ABORT_AFTER_ERRORS", "5"))
+# A run with more than this fraction of backend errors is marked invalid and
+# refused as comparison input.
+INVALID_ERROR_RATE = float(os.getenv("EVAL_INVALID_ERROR_RATE", "0.2"))
+
 
 def _load_run(path: str) -> dict:
     with open(path) as f:
@@ -596,6 +616,29 @@ def compare_runs(baseline_path: str, candidate_path: str) -> int:
     would otherwise look like a pile of fixes or regressions.
     """
     base, cand = _load_run(baseline_path), _load_run(candidate_path)
+
+    # Refuse to compare a run that couldn't reach the backend. Diffing an
+    # outage against a healthy run reports every case as a regression, which
+    # reads as a catastrophic quality drop and is pure noise.
+    bad = [(label, run) for label, run in (("baseline", base), ("candidate", cand))
+           if run.get("meta", {}).get("invalid")]
+    if bad:
+        print("=" * 70)
+        print("COMPARISON REFUSED — a run is not valid evidence about quality")
+        print("=" * 70)
+        for label, run in bad:
+            m = run["meta"]
+            print(f"  {label}: {m.get('when')} → {m.get('base_url')}")
+            print(f"    backend errors: {m.get('backend_errors')}"
+                  f"/{m.get('cases_attempted')} cases"
+                  + ("  (run aborted early)" if m.get("aborted") else ""))
+        print()
+        print("  The backend was failing during that run, so its results")
+        print("  describe an outage, not answer quality. Fix the backend")
+        print("  (curl -s localhost:8000/health/deep) and re-run.")
+        print("=" * 70)
+        return 2
+
     b, c = _by_id(base), _by_id(cand)
 
     shared = sorted(set(b) & set(c))
@@ -687,6 +730,9 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
           f"(judge: {'OFF' if no_llm else JUDGE_MODEL}, delay {delay}s)\n")
 
     results: list[dict] = []
+    backend_errors = 0        # cases where the backend, not the answer, failed
+    consecutive_errors = 0
+    aborted = False
     for i, case in enumerate(cases):
         if i > 0 and delay > 0:
             time.sleep(delay)
@@ -704,15 +750,31 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
                             "metrics": [], "answer_preview": ""})
             continue
 
+        # A backend error is NOT an answer-quality result. Judging it wastes an
+        # API call per case and, worse, files the outage in the report as a
+        # keyword failure — which is how a dead database comes to look like 128
+        # quality regressions.
+        backend_down = status >= 500 or (status != 200 and not answer)
+        if backend_down:
+            consecutive_errors += 1
+            backend_errors += 1
+        else:
+            consecutive_errors = 0
+
         det_failures = _check(answer, status, case)
-        metric_results = [] if no_llm else _run_metrics(case, answer, context)
+        if backend_down:
+            det_failures = [f"backend error: HTTP {status} (no answer returned)"]
+            metric_results = []
+        else:
+            metric_results = [] if no_llm else _run_metrics(case, answer, context)
         ok = not det_failures and all(m["passed"] for m in metric_results)
         elapsed = time.time() - t0
 
         verdict = "PASS " if ok else "FAIL "
         print(f"[{cid:>4}] {verdict}[{case['priority']}] {display_q!r} ({elapsed:.1f}s)")
         for d in det_failures:
-            print(f"           keyword: {d}")
+            label = "backend" if backend_down else "keyword"
+            print(f"           {label}: {d}")
         for m in metric_results:
             flag = "ok " if m["passed"] else "LOW"
             print(f"           {flag} {m['metric']}: {m['score']}"
@@ -721,15 +783,38 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
         results.append({
             "id": cid, "priority": case["priority"],
             "tags": case.get("tags", []), "question": q, "passed": ok,
+            "http_status": status,
             "deterministic_failures": det_failures, "metrics": metric_results,
             # Full-ish answer so faithfulness flags can be adjudicated from
             # the report without re-running the case.
             "answer_preview": (answer or "")[:2000],
         })
 
+        if ABORT_AFTER_ERRORS > 0 and consecutive_errors >= ABORT_AFTER_ERRORS:
+            aborted = True
+            print(f"\n{'!' * 70}")
+            print(f"ABORTED: {consecutive_errors} consecutive backend errors.")
+            print("The backend is not answering — this is an outage, not an")
+            print("answer-quality result. Continuing would spend a judge call")
+            print("per remaining case and produce a report that looks like a")
+            print("pile of regressions.")
+            print("  Check:  curl -s localhost:8000/health/deep | head -c 400")
+            print(f"{'!' * 70}")
+            break
+
+    total_attempted = len(results)
+    invalid = aborted or (total_attempted > 0
+                          and backend_errors / total_attempted > INVALID_ERROR_RATE)
     meta = {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "base_url": BASE_URL,
             "judge_model": JUDGE_MODEL, "threshold": JUDGE_THRESHOLD,
-            "no_llm": no_llm}
+            "no_llm": no_llm,
+            # Recorded so this run can never be mistaken for evidence about
+            # answer quality — compare_runs refuses to use an invalid run.
+            "backend_errors": backend_errors,
+            "cases_attempted": total_attempted,
+            "cases_planned": len(cases),
+            "aborted": aborted,
+            "invalid": invalid}
     md_path = _write_report(results, meta)
     failed = sum(1 for r in results if not r["passed"])
     print(f"\n{len(results) - failed} passed, {failed} failed out of {len(results)}")

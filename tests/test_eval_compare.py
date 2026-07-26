@@ -166,6 +166,72 @@ def test_metric_absent_from_baseline_does_not_crash(tmp_path, mod):
 
 # ── Archiving ────────────────────────────────────────────────────────────────
 
+# ── Outage runs must not count as evidence ───────────────────────────────────
+
+def _invalid_run_file(tmp_path, name, results, **meta_extra):
+    path = tmp_path / name
+    meta = {"when": "2026-07-26 00:55:58", "base_url": "http://localhost:8000",
+            "judge_model": "gpt-4o-mini", "threshold": 0.7, "no_llm": False,
+            "invalid": True, "aborted": False,
+            "backend_errors": len(results), "cases_attempted": len(results)}
+    meta.update(meta_extra)
+    path.write_text(json.dumps({"meta": meta, "results": results}))
+    return str(path)
+
+
+def test_comparison_refuses_an_invalid_candidate(tmp_path, mod, capsys):
+    """The real scenario: the database was down, so every case 'failed'.
+    Diffing that against a healthy baseline would report a catastrophic quality
+    drop that is entirely an artifact of the outage."""
+    base = _run_file(tmp_path, "base.json", [_case("A.1", True), _case("A.2", True)])
+    cand = _invalid_run_file(tmp_path, "cand.json",
+                             [_case("A.1", False), _case("A.2", False)])
+    assert mod.compare_runs(base, cand) == 2, "refusal uses a distinct exit code"
+    out = capsys.readouterr().out
+    assert "COMPARISON REFUSED" in out
+    assert "REGRESSED" not in out, "must not report regressions from an outage"
+
+
+def test_comparison_refuses_an_invalid_baseline(tmp_path, mod, capsys):
+    base = _invalid_run_file(tmp_path, "base.json", [_case("A.1", False)])
+    cand = _run_file(tmp_path, "cand.json", [_case("A.1", True)])
+    assert mod.compare_runs(base, cand) == 2
+    assert "baseline" in capsys.readouterr().out
+
+
+def test_valid_runs_still_compare_normally(tmp_path, mod, capsys):
+    """The guard must not fire on healthy runs — reports written before this
+    field existed have no 'invalid' key at all."""
+    base = _run_file(tmp_path, "base.json", [_case("A.1", True)])
+    cand = _run_file(tmp_path, "cand.json", [_case("A.1", True)])
+    assert mod.compare_runs(base, cand) == 0
+    assert "COMPARISON REFUSED" not in capsys.readouterr().out
+
+
+def test_report_carries_a_visible_invalid_banner(tmp_path, mod, monkeypatch):
+    """The markdown is what gets read weeks later — it must say so itself."""
+    monkeypatch.setattr(mod, "REPORT_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "HISTORY_DIR", str(tmp_path / "history"))
+    meta = {"when": "2026-07-26 00:55:58", "base_url": "http://localhost:8000",
+            "judge_model": "m", "threshold": 0.7, "no_llm": False,
+            "invalid": True, "aborted": True,
+            "backend_errors": 5, "cases_attempted": 5}
+    md_path = mod._write_report([_case("A.1", False)], meta)
+    text = open(md_path).read()
+    assert "THIS RUN IS NOT VALID" in text
+    assert "backend outage" in text
+    assert "aborted early" in text
+
+
+def test_valid_report_has_no_banner(tmp_path, mod, monkeypatch):
+    monkeypatch.setattr(mod, "REPORT_DIR", str(tmp_path))
+    monkeypatch.setattr(mod, "HISTORY_DIR", str(tmp_path / "history"))
+    meta = {"when": "2026-07-26 10:00:00", "base_url": "http://localhost:8000",
+            "judge_model": "m", "threshold": 0.7, "no_llm": False, "invalid": False}
+    md_path = mod._write_report([_case("A.1", True)], meta)
+    assert "NOT VALID" not in open(md_path).read()
+
+
 def test_archive_slug_is_sortable_and_names_the_target(mod):
     local = mod._archive_slug({"when": "2026-07-26 10:00:00",
                                "base_url": "http://localhost:8000"})
