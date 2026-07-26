@@ -524,6 +524,25 @@ def _row_to_chunk(row) -> dict:
     }
 
 
+# Directory roster documents (crawler.py builds one per role: Faculty,
+# Leadership, Emeritus Faculty, Qatar Faculty, Staff...). Each is a single chunk
+# listing every person in that role, so they are long and dense with proper
+# nouns — which makes them *attractor documents* in vector space: they score
+# plausibly against almost any question and crowd out the specific page the user
+# wanted. Asking "what research areas does ECE specialize in" returned the
+# Qatar, Leadership and Emeritus rosters as its top three sources and not one
+# research page.
+#
+# They are excluded from the DENSE arm only. They still exist as chunks and are
+# still reachable through the keyword (FTS) and fuzzy (trigram) arms, which is
+# what actually matters: those questions name the role out loud ("who are the
+# emeritus faculty", "who is in ECE leadership"), so lexical matching finds them
+# reliably. This is deliberately not a blanket exclusion — graph.json holds only
+# the 71 teaching faculty, so these chunks are the ONLY source for leadership,
+# emeritus, Qatar and staff questions and must stay retrievable.
+ROSTER_URL_PATTERN = "%/profiles/index.html#%"
+
+
 def _dense_search(query_vec: list[float], section_filter: Optional[str] = None) -> list[dict]:
     with _conn() as conn, conn.cursor() as cur:
         if section_filter:
@@ -531,18 +550,19 @@ def _dense_search(query_vec: list[float], section_filter: Optional[str] = None) 
                 SELECT chunk_id, url, title, section, text,
                        1 - (embedding <=> %s::vector) AS score
                 FROM ecen_docs
-                WHERE section = %s
+                WHERE section = %s AND url NOT LIKE %s
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
-            """, (query_vec, section_filter, query_vec, DENSE_TOP_K))
+            """, (query_vec, section_filter, ROSTER_URL_PATTERN, query_vec, DENSE_TOP_K))
         else:
             cur.execute("""
                 SELECT chunk_id, url, title, section, text,
                        1 - (embedding <=> %s::vector) AS score
                 FROM ecen_docs
+                WHERE url NOT LIKE %s
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
-            """, (query_vec, query_vec, DENSE_TOP_K))
+            """, (query_vec, ROSTER_URL_PATTERN, query_vec, DENSE_TOP_K))
         return [_row_to_chunk(r) for r in cur.fetchall()]
 
 
