@@ -33,6 +33,7 @@ from graph_retriever import (
     graph_query, build_area_roster, build_intersection_roster, is_full_faculty_query,
     build_full_faculty_roster, faculty_roster_sources, research_area_names,
     is_degree_list_query, build_degree_roster, find_faculty_mentions,
+    is_area_list_query, build_area_list_roster,
 )
 from scheduler import create_scheduler, run_reindex
 import scheduler as _scheduler
@@ -362,10 +363,11 @@ async def report_issue(request: Request, req: ReportRequest):
 
 # URLs of synthetic, code-generated context chunks — excluded from cited sources.
 _SYNTHETIC_URLS = {"knowledge-graph", "research-area-roster", "faculty-roster",
-                   "degree-roster", "about:eira"}
+                   "degree-roster", "research-area-list", "about:eira"}
 # Roster paths supply their own already-curated, relevant source list — keep all
 # of those; only the open-ended retrieval path needs trimming.
-_ROSTER_URLS = {"research-area-roster", "faculty-roster", "degree-roster"}
+_ROSTER_URLS = {"research-area-roster", "faculty-roster", "degree-roster",
+                "research-area-list"}
 # Max sources to cite on the normal retrieval path (we feed more chunks to the
 # LLM for answer completeness, but only cite the few most relevant).
 MAX_SOURCES = 6
@@ -715,6 +717,23 @@ async def _prepare_chunks(req: "ChatRequest", route: Optional[dict] = None,
             deduped = [c for c in precise
                        if c["url"] not in seen and not seen.add(c["url"])]
             return [roster_chunk] + deduped
+
+    # Authoritative complete research-area list from the graph. Without this,
+    # "what research areas does ECE specialize in" went to open-ended retrieval,
+    # where the `research` section is ~40 of ~1,860 chunks against ~836 news
+    # chunks — the top-k filled with news and the model answered "I don't have
+    # specific details" even with a perfectly healthy database.
+    if is_area_list_query(req.question):
+        roster = build_area_list_roster()
+        if roster:
+            log.info("Research-area roster injected for %r", req.question)
+            return [
+                {"url": "research-area-list", "title": "TAMU ECE Research Areas",
+                 "section": "graph", "text": roster, "rerank_score": 10.0},
+                {"url": "https://engineering.tamu.edu/electrical/research/index.html",
+                 "title": "Research | Texas A&M University Engineering",
+                 "section": "research", "text": "", "rerank_score": 0.0},
+            ]
 
     # Authoritative complete degree-program list from the graph, so the answer
     # never drops newer programs (Microelectronics MS, certificates, minor) that
