@@ -36,7 +36,10 @@ jobs:
           node-version: "20"
 
       - name: Install Python deps
-        run: pip install openai pytest
+        # Pinned in requirements-test.txt so the CI environment can't drift away
+        # from what the tests actually import (an ad-hoc `pip install` list here
+        # silently skipped tests that needed anything else).
+        run: pip install openai -r requirements-test.txt
 
       - name: Generate fix + regression test
         env:

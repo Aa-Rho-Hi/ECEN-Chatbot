@@ -175,8 +175,35 @@ Wait for `Models ready.` then `Uvicorn running on http://0.0.0.0:8000`
 Sanity check: `curl http://127.0.0.1:8000/health`.
 
 Backend endpoints: `POST /chat` (SSE stream), `POST /chat/sync` (JSON),
-`GET /health`, `POST /feedback`, `POST /report-issue`, `GET /admin/stats`,
-`GET /admin/test-llm` (isolates the LLM from retrieval), `POST /admin/reindex`.
+`GET /health`, `GET /health/deep`, `POST /feedback`, `POST /report-issue`,
+`GET /admin/stats`, `GET /admin/test-llm` (isolates the LLM from retrieval),
+`POST /admin/reindex`.
+
+**`/health` vs `/health/deep`.** `/health` is liveness only — no I/O, so a slow
+dependency can't fail the platform's probe. `/health/deep` is readiness: it
+queries `ecen_docs` and returns **503** if the vector store is unreachable or
+empty. Point Cloud Run's *startup* probe at `/health` and use `/health/deep`
+for alerting. Without it, an instance that had lost its database stayed in
+rotation and answered every question with the "I couldn't find anything"
+fallback — a data outage that looked like a content gap.
+
+**`/admin/*` requires a token.** Set `ADMIN_TOKEN` (`openssl rand -hex 32`) and
+send it as the `X-Admin-Token` header:
+
+```bash
+curl -X POST http://127.0.0.1:8000/admin/reindex -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+Auth **fails closed** — with `ADMIN_TOKEN` unset those endpoints return 503, so
+a forgotten env var can't silently leave them open. For local development only,
+`ALLOW_INSECURE_ADMIN=1` bypasses the check.
+
+> **Deploy checklist:** the Cloud Run service needs `ADMIN_TOKEN` in its env,
+> and the nightly Cloud Scheduler job that calls `/admin/reindex` needs the
+> matching `X-Admin-Token` header added — otherwise the nightly re-index starts
+> returning 401 and the index quietly goes stale. Only one re-index runs at a
+> time now; a request arriving mid-crawl returns `{"status": "already_running"}`
+> instead of starting a competing crawler.
 
 ### 4.5 Run the frontend
 

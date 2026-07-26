@@ -23,13 +23,33 @@ CRAWLER_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "cra
 # Tracks the outcome of the last run — readable via GET /health
 last_reindex: dict = {"status": "never_run", "finished_at": None, "message": ""}
 
+# Only one crawl at a time. Without this, the 2AM cron firing while a manual
+# /admin/reindex is still running (or a few impatient clicks on the admin
+# endpoint) starts overlapping crawlers that hammer the department site and
+# race each other's upserts into ecen_docs.
+_reindex_lock = asyncio.Lock()
+
+
+def reindex_running() -> bool:
+    return _reindex_lock.locked()
+
 
 async def run_reindex() -> None:
     """Runs the crawler + ingest pipeline in diff mode (only new/changed pages).
 
     Uses asyncio.create_subprocess_exec so the FastAPI event loop is NOT blocked
-    during the crawl (which can take up to an hour).
+    during the crawl (which can take up to an hour). No-ops if a re-index is
+    already in flight.
     """
+    if _reindex_lock.locked():
+        log.warning("Re-index requested while one is already running — skipping.")
+        return
+
+    async with _reindex_lock:
+        await _run_reindex_locked()
+
+
+async def _run_reindex_locked() -> None:
     global last_reindex
     started_at = datetime.now(timezone.utc).isoformat()
     log.info("Scheduled re-index starting at %s (cwd: %s)", started_at, CRAWLER_DIR)

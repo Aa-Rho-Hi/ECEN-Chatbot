@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from typing import Optional
 
 import psycopg2
+import psycopg2.pool  # noqa: F401  — needed for psycopg2.pool.PoolError below
 from pgvector.psycopg2 import register_vector
 from dotenv import load_dotenv
 from rank_bm25 import BM25Okapi
@@ -138,6 +139,67 @@ POOL_MAX = int(os.getenv("PG_POOL_MAX", "16"))
 # holds a reference) so their ids stay stable for the life of the process.
 _registered_conn_ids: set[int] = set()
 
+# Connections that have been idle in the pool longer than this are validated
+# with a cheap `SELECT 1` before use. Managed Postgres front-ends (the Supabase
+# pooler, PgBouncer, cloud NAT/idle timeouts) silently close server-side
+# connections after a few minutes of inactivity. psycopg2 has no way to know —
+# `conn.closed` still reads 0 — so the pool happily hands back a corpse and
+# every query fails until the process restarts. Validating only *idle* checkouts
+# keeps the hot path free of an extra round trip.
+POOL_VALIDATE_IDLE_SECS = float(os.getenv("PG_VALIDATE_IDLE_SECS", "60"))
+# How long to wait for a free connection when all POOL_MAX are checked out,
+# rather than failing the request instantly with a PoolError.
+POOL_ACQUIRE_TIMEOUT = float(os.getenv("PG_ACQUIRE_TIMEOUT", "5"))
+# id(conn) → monotonic timestamp of its last successful use.
+_conn_last_used: dict[int, float] = {}
+
+
+def _discard(pool, conn) -> None:
+    """Return a connection to the pool as closed, so the pool replaces it with a
+    fresh one instead of recycling a connection we know is broken."""
+    try:
+        _registered_conn_ids.discard(id(conn))
+        _conn_last_used.pop(id(conn), None)
+        pool.putconn(conn, close=True)
+    except Exception:  # noqa: BLE001
+        log.warning("Failed to discard broken PG connection", exc_info=True)
+
+
+def _acquire(pool):
+    """getconn() with a bounded wait instead of an immediate PoolError.
+
+    Under a burst of concurrent chats every connection can be checked out for a
+    moment; failing the request outright when waiting ~1s would have served it
+    turns a load spike into visible errors."""
+    import time as _t
+    deadline = _t.monotonic() + POOL_ACQUIRE_TIMEOUT
+    delay = 0.02
+    while True:
+        try:
+            return pool.getconn()
+        except psycopg2.pool.PoolError:
+            if _t.monotonic() >= deadline:
+                log.error("PG pool exhausted (max=%d) after %.1fs", POOL_MAX,
+                          POOL_ACQUIRE_TIMEOUT)
+                raise
+            _t.sleep(delay)
+            delay = min(delay * 2, 0.25)
+
+
+def _is_usable(conn) -> bool:
+    """True if the connection still answers. Only called on connections that
+    have been idle long enough to plausibly have been dropped upstream."""
+    if conn.closed:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        conn.rollback()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
 
 def _get_pool():
     global _POOL
@@ -151,18 +213,114 @@ def _get_pool():
                     host_part = "(unknown)"
                 log.info("Creating PG connection pool at %s (min=%d max=%d)…",
                          host_part, POOL_MIN, POOL_MAX)
-                _POOL = _pg_pool.ThreadedConnectionPool(
+                # Build into a local first and only publish to _POOL once setup
+                # succeeded. Assigning up front meant a transient DB blip during
+                # the one-time DDL left a half-initialized pool installed for the
+                # life of the process, with no path to retry.
+                pool = _pg_pool.ThreadedConnectionPool(
                     POOL_MIN, POOL_MAX, PG_DSN, connect_timeout=10)
-                # One-time extension setup — NOT on the per-request hot path.
-                conn = _POOL.getconn()
                 try:
-                    with conn.cursor() as cur:
-                        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                        cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
-                    conn.commit()
-                finally:
-                    _POOL.putconn(conn)
+                    # One-time extension setup — NOT on the per-request hot path.
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                            cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
+                        conn.commit()
+                    finally:
+                        pool.putconn(conn)
+                except Exception:
+                    try:
+                        pool.closeall()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    log.exception("PG pool setup failed; will retry on next use")
+                    raise
+                _POOL = pool
     return _POOL
+
+
+def db_healthy() -> tuple[bool, str]:
+    """Probe the vector store. Used by the deep health check so an instance that
+    has lost its database can be taken out of rotation instead of answering
+    every question with 'I couldn't find anything on the website'."""
+    try:
+        with _conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM ecen_docs")
+            (n,) = cur.fetchone()
+        if not n:
+            return False, "ecen_docs is empty"
+        return True, f"{n} chunks"
+    except Exception as e:  # noqa: BLE001
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _checkout(pool):
+    """A connection that is live and has the pgvector adapter registered.
+
+    Discards and replaces connections the upstream pooler dropped while they sat
+    idle, so a quiet period can't poison the pool. Tries a bounded number of
+    times: if several pooled connections have gone stale at once (e.g. the whole
+    pool aged out overnight) we want to cycle past all of them, not give up on
+    the first corpse.
+    """
+    import time as _t
+    last_err: Exception | None = None
+    for _ in range(POOL_MAX + 1):
+        conn = _acquire(pool)
+        idle_for = _t.monotonic() - _conn_last_used.get(id(conn), 0.0)
+        if idle_for > POOL_VALIDATE_IDLE_SECS and not _is_usable(conn):
+            log.info("Discarding PG connection idle for %.0fs — upstream closed it",
+                     idle_for)
+            _discard(pool, conn)
+            continue
+        try:
+            if id(conn) not in _registered_conn_ids:
+                register_vector(conn)
+                _registered_conn_ids.add(id(conn))
+            return conn
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            _discard(pool, conn)
+    raise RuntimeError("Could not obtain a usable PG connection") from last_err
+
+
+@contextmanager
+def _conn_from_pool(pool):
+    """Core checkout/checkin logic against an explicit pool.
+
+    Split out from _conn() so the failure paths can be unit-tested without a
+    live Postgres (see tests/test_db_pool_resilience.py).
+
+    Connections that error out are closed rather than recycled — returning a
+    connection in an unknown state to the pool spreads one failure across every
+    later request that happens to draw it.
+    """
+    import time as _t
+    conn = _checkout(pool)
+    broken = False
+    try:
+        yield conn
+        # End the implicit read transaction cleanly (also discards any
+        # SET LOCAL, e.g. the fuzzy threshold) so the next checkout is fresh.
+        conn.rollback()
+        _conn_last_used[id(conn)] = _t.monotonic()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Connection-level failure: this socket is not reusable.
+        broken = True
+        raise
+    except Exception:
+        try:
+            conn.rollback()
+            _conn_last_used[id(conn)] = _t.monotonic()
+        except Exception:
+            broken = True
+        raise
+    finally:
+        if broken:
+            _discard(pool, conn)
+        else:
+            pool.putconn(conn)
 
 
 @contextmanager
@@ -173,24 +331,8 @@ def _conn():
     connections (no shared-connection concurrency bug) without paying a fresh
     connect()/DDL on every request.
     """
-    pool = _get_pool()
-    conn = pool.getconn()
-    try:
-        if id(conn) not in _registered_conn_ids:
-            register_vector(conn)
-            _registered_conn_ids.add(id(conn))
+    with _conn_from_pool(_get_pool()) as conn:
         yield conn
-        # End the implicit read transaction cleanly (also discards any
-        # SET LOCAL, e.g. the fuzzy threshold) so the next checkout is fresh.
-        conn.rollback()
-    except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
-        raise
-    finally:
-        pool.putconn(conn)
 
 
 def _get_device() -> str:
