@@ -5,6 +5,12 @@ httpx>=0.27
 # backend/generator.py loads .env at import time, so the unit tests that import
 # it need this even though no real key is used.
 python-dotenv>=1.0
+# tests/test_outage_end_to_end.py drives the real FastAPI app through
+# TestClient with a stubbed-dead database. Heavy deps (psycopg2, torch,
+# sentence-transformers) stay stubbed, but the web layer must be genuine for
+# the test to prove anything. Skipped automatically if these are absent.
+fastapi>=0.110
+slowapi>=0.1.9
 # LLM-judged regression suite (scripts/deepeval_eval.py); judge = OpenAI,
 # needs OPENAI_API_KEY (or run with --no-llm for keyword checks only).
 deepeval>=4.0

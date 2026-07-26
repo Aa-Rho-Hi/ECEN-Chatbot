@@ -187,6 +187,20 @@ for alerting. Without it, an instance that had lost its database stayed in
 rotation and answered every question with the "I couldn't find anything"
 fallback — a data outage that looked like a content gap.
 
+`/health/deep` also reports the **database circuit breaker**. When Postgres is
+unreachable, psycopg2 spends `connect_timeout` (10s) per attempt, so during the
+2026-07-26 Supabase pause every request held a worker thread for ~10s to produce
+an error it could have produced instantly. After `PG_BREAKER_THRESHOLD` (3)
+consecutive failures the breaker opens and requests fail in microseconds for
+`PG_BREAKER_COOLDOWN` (30s), then one request is let through as a probe. Recovery
+is automatic — no restart needed. `GET /health/deep?force=1` bypasses the breaker
+for an authoritative "is it back yet?" check.
+
+The database is also probed once during startup, so a bad DSN shows up in the
+logs immediately instead of on the first user question. It is **non-fatal** on
+purpose: refusing to boot would take the app down over a dependency that may
+return on its own, and would break the graceful "temporarily unavailable" path.
+
 **`/admin/*` requires a token.** Set `ADMIN_TOKEN` (`openssl rand -hex 32`) and
 send it as the `X-Admin-Token` header:
 

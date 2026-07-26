@@ -154,6 +154,85 @@ POOL_ACQUIRE_TIMEOUT = float(os.getenv("PG_ACQUIRE_TIMEOUT", "5"))
 _conn_last_used: dict[int, float] = {}
 
 
+# ── Circuit breaker ──────────────────────────────────────────────────────────
+# When the database is unreachable, psycopg2 still spends connect_timeout (10s)
+# on every single attempt before giving up — and ThreadedConnectionPool opens
+# POOL_MIN connections eagerly, so a failed pool build costs that much again.
+# During the 2026-07-26 Supabase pause that meant every request occupied a
+# worker thread for ~10s to produce an error it could have produced instantly.
+# A handful of concurrent users was enough to stall the whole service.
+#
+# The breaker trips after a few consecutive connection failures and then fails
+# in microseconds for a cooldown window, so the app stays responsive and returns
+# its "temporarily unavailable" message immediately. After the cooldown one
+# request is allowed through as a probe (half-open); if it succeeds the breaker
+# resets, so recovery is automatic and needs no restart.
+BREAKER_THRESHOLD = int(os.getenv("PG_BREAKER_THRESHOLD", "3"))
+BREAKER_COOLDOWN = float(os.getenv("PG_BREAKER_COOLDOWN", "30"))
+
+_breaker_failures = 0
+_breaker_opened_at = 0.0
+_breaker_lock = threading.Lock()
+
+
+class DatabaseUnavailable(RuntimeError):
+    """The circuit breaker is open — the database is known to be down, so this
+    request failed immediately instead of waiting out a connection timeout."""
+
+
+def _breaker_state() -> dict:
+    """Snapshot for the deep health check / diagnostics."""
+    import time as _t
+    with _breaker_lock:
+        open_ = _breaker_failures >= BREAKER_THRESHOLD
+        remaining = 0.0
+        if open_:
+            remaining = max(0.0, BREAKER_COOLDOWN - (_t.monotonic() - _breaker_opened_at))
+        return {"open": open_, "consecutive_failures": _breaker_failures,
+                "cooldown_remaining_s": round(remaining, 1)}
+
+
+def _breaker_check() -> None:
+    """Fail fast while the breaker is open and still cooling down."""
+    import time as _t
+    if BREAKER_THRESHOLD <= 0:
+        return
+    with _breaker_lock:
+        if _breaker_failures < BREAKER_THRESHOLD:
+            return
+        waited = _t.monotonic() - _breaker_opened_at
+        if waited < BREAKER_COOLDOWN:
+            raise DatabaseUnavailable(
+                f"database circuit breaker open "
+                f"({_breaker_failures} consecutive failures, retrying in "
+                f"{BREAKER_COOLDOWN - waited:.0f}s)")
+        # Cooldown elapsed — let this caller through as a half-open probe.
+        log.info("PG breaker half-open: probing after %.0fs cooldown", waited)
+
+
+def _breaker_record_failure() -> None:
+    import time as _t
+    global _breaker_failures, _breaker_opened_at
+    with _breaker_lock:
+        _breaker_failures += 1
+        if _breaker_failures == BREAKER_THRESHOLD:
+            log.error("PG breaker OPEN after %d consecutive failures — failing "
+                      "fast for %.0fs", _breaker_failures, BREAKER_COOLDOWN)
+        # Re-arm the cooldown on every failure at/after the threshold so a
+        # failing half-open probe doesn't leave the breaker instantly re-open
+        # for the next caller.
+        if _breaker_failures >= BREAKER_THRESHOLD:
+            _breaker_opened_at = _t.monotonic()
+
+
+def _breaker_record_success() -> None:
+    global _breaker_failures
+    with _breaker_lock:
+        if _breaker_failures:
+            log.info("PG breaker reset after a successful query")
+        _breaker_failures = 0
+
+
 def _discard(pool, conn) -> None:
     """Return a connection to the pool as closed, so the pool replaces it with a
     fresh one instead of recycling a connection we know is broken."""
@@ -240,17 +319,28 @@ def _get_pool():
     return _POOL
 
 
-def db_healthy() -> tuple[bool, str]:
+def db_healthy(bypass_breaker: bool = False) -> tuple[bool, str]:
     """Probe the vector store. Used by the deep health check so an instance that
     has lost its database can be taken out of rotation instead of answering
-    every question with 'I couldn't find anything on the website'."""
+    every question with 'I couldn't find anything on the website'.
+
+    bypass_breaker forces a real connection attempt even while the breaker is
+    open — useful for an explicit "is it back yet?" check, at the cost of
+    waiting out the connect timeout.
+    """
+    global _breaker_failures
     try:
+        if bypass_breaker:
+            with _breaker_lock:
+                _breaker_failures = 0
         with _conn() as conn, conn.cursor() as cur:
             cur.execute("SELECT count(*) FROM ecen_docs")
             (n,) = cur.fetchone()
         if not n:
             return False, "ecen_docs is empty"
         return True, f"{n} chunks"
+    except DatabaseUnavailable as e:
+        return False, str(e)
     except Exception as e:  # noqa: BLE001
         return False, f"{type(e).__name__}: {e}"
 
@@ -330,9 +420,26 @@ def _conn():
     Each retrieval arm calls this independently, so parallel arms get distinct
     connections (no shared-connection concurrency bug) without paying a fresh
     connect()/DDL on every request.
+
+    Guarded by the circuit breaker: while the database is known to be down this
+    raises DatabaseUnavailable immediately rather than spending 10s of connect
+    timeout per request. Callers in main.py already degrade any retrieval
+    exception into the user-facing "temporarily unavailable" message.
     """
-    with _conn_from_pool(_get_pool()) as conn:
-        yield conn
+    _breaker_check()
+    try:
+        pool = _get_pool()
+    except Exception:
+        # Pool construction itself failed — the database is unreachable.
+        _breaker_record_failure()
+        raise
+    try:
+        with _conn_from_pool(pool) as conn:
+            yield conn
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _breaker_record_failure()
+        raise
+    _breaker_record_success()
 
 
 def _get_device() -> str:

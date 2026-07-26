@@ -56,6 +56,27 @@ async def lifespan(app: FastAPI):
     )
     log.info("Models ready.")
 
+    # Probe the database at startup. The connection pool is otherwise built
+    # lazily on the first question, so an instance with an unreachable database
+    # logs "Application startup complete", looks healthy, and only reveals the
+    # problem when a user asks something — that is exactly how the 2026-07-26
+    # Supabase pause went unnoticed for seven minutes with a live URL.
+    #
+    # Deliberately NON-fatal: refusing to start would take the whole app down
+    # over a dependency that may come back on its own, and would break the
+    # canned "temporarily unavailable" path that lets users see a real message.
+    try:
+        from retriever import db_healthy
+        db_ok, db_detail = await asyncio.to_thread(db_healthy)
+        if db_ok:
+            log.info("Database ready: %s", db_detail)
+        else:
+            log.error("DATABASE UNAVAILABLE AT STARTUP: %s — the app will serve "
+                      "'temporarily unavailable' for content questions until it "
+                      "recovers. Check /health/deep.", db_detail)
+    except Exception:  # noqa: BLE001
+        log.exception("Database startup probe failed unexpectedly")
+
     # On Cloud Run the CPU is only allocated during requests, so the in-process
     # APScheduler won't fire reliably — set DISABLE_SCHEDULER=1 there and drive
     # /admin/reindex from Cloud Scheduler instead.
@@ -230,7 +251,7 @@ async def health():
 
 
 @app.get("/health/deep")
-async def health_deep():
+async def health_deep(request: Request):
     """Readiness: is this instance actually able to answer questions?
 
     Returns 503 when the vector store is unreachable or empty. The shallow
@@ -243,12 +264,17 @@ async def health_deep():
 
     from retriever import db_healthy
 
-    db_ok, db_detail = await asyncio.to_thread(db_healthy)
+    # ?force=1 bypasses the circuit breaker for an authoritative "is it back
+    # yet?" check. Without it this endpoint reports the breaker's view, which
+    # is what the chat path will actually experience right now.
+    force = request.query_params.get("force") in ("1", "true", "yes")
+    db_ok, db_detail = await asyncio.to_thread(db_healthy, force)
     models_ok = retriever_module._embedder is not None and retriever_module._reranker is not None
 
     body = {
         "status": "ok" if db_ok else "degraded",
-        "database": {"ok": db_ok, "detail": db_detail},
+        "database": {"ok": db_ok, "detail": db_detail,
+                     "breaker": retriever_module._breaker_state()},
         "models": {"ok": models_ok},
         "reindex_running": _scheduler.reindex_running(),
         "last_reindex": _scheduler.last_reindex,

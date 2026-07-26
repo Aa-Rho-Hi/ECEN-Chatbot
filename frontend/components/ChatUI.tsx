@@ -167,7 +167,13 @@ export default function ChatUI() {
         setStreaming(false); abortRef.current = null;
         return;
       }
-      if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`);
+      // An outage response is still SSE: the proxy wraps its explanation in
+      // data: frames precisely so it reaches the user instead of being dropped
+      // as a non-2xx and replaced by the generic apology below. The non-200
+      // status is kept for monitoring and the eval harness, so trust the
+      // content type rather than res.ok when deciding whether to read a body.
+      const isStream = res.headers.get("content-type")?.includes("text/event-stream");
+      if ((!res.ok && !isStream) || !res.body) throw new Error(`HTTP ${res.status}`);
       const reader = res.body.getReader();
       const dec = new TextDecoder();
       let buf = "", sources: Source[] = [], answer = "";
