@@ -198,12 +198,16 @@ Auth **fails closed** — with `ADMIN_TOKEN` unset those endpoints return 503, s
 a forgotten env var can't silently leave them open. For local development only,
 `ALLOW_INSECURE_ADMIN=1` bypasses the check.
 
-> **Deploy checklist:** the Cloud Run service needs `ADMIN_TOKEN` in its env,
-> and the nightly Cloud Scheduler job that calls `/admin/reindex` needs the
-> matching `X-Admin-Token` header added — otherwise the nightly re-index starts
-> returning 401 and the index quietly goes stale. Only one re-index runs at a
-> time now; a request arriving mid-crawl returns `{"status": "already_running"}`
-> instead of starting a competing crawler.
+> **Deploy checklist:** add `ADMIN_TOKEN` to the Cloud Run service env. The
+> nightly re-index is **not** affected — Cloud Scheduler triggers the
+> `ecen-reindex` Cloud Run Job, which runs `ingest.py --diff` directly and never
+> touches this endpoint. Until `ADMIN_TOKEN` is set, `/admin/*` returns 503;
+> that's the intended fail-closed behaviour, not a regression.
+>
+> Only one re-index runs at a time now; a request arriving mid-crawl returns
+> `{"status": "already_running"}` instead of starting a competing crawler. (In
+> production the in-process scheduler is off via `DISABLE_SCHEDULER=1`, so this
+> guards manual `/admin/reindex` calls and local runs.)
 
 ### 4.5 Run the frontend
 
