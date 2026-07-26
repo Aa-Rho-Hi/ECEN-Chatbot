@@ -319,6 +319,44 @@ def _get_pool():
     return _POOL
 
 
+def embedder_identity(model_ref: Optional[str] = None) -> str:
+    """Stable name for an embedding model reference (mirrors ingest.py).
+
+    Paths reduce to their final component, so an absolute local path and the
+    portable name for the same model compare equal.
+    """
+    ref = (model_ref if model_ref is not None else EMBED_MODEL).strip()
+    return os.path.basename(ref.rstrip("/")) or ref
+
+
+def embedder_matches_index() -> tuple[bool, str]:
+    """Is the query embedder the same one that wrote the stored vectors?
+
+    A mismatch is silent, not loud: both models here are 384-dimensional, so
+    pgvector accepts every query and simply returns near-random neighbours from
+    an incompatible coordinate system. Retrieval then looks "working but bad",
+    which is indistinguishable from a content gap without this check.
+    """
+    current = embedder_identity()
+    try:
+        with _conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.ecen_meta');")
+            if cur.fetchone()[0] is None:
+                return True, f"{current} (index predates embedder tracking)"
+            cur.execute("SELECT value FROM ecen_meta WHERE key = 'embedding_model';")
+            row = cur.fetchone()
+    except Exception as e:  # noqa: BLE001
+        return True, f"unknown ({type(e).__name__})"
+
+    if not row:
+        return True, f"{current} (no embedder recorded)"
+    stored = row[0]
+    if stored == current:
+        return True, current
+    return False, (f"MISMATCH: index built with '{stored}' but queries use "
+                   f"'{current}' — retrieval results are meaningless")
+
+
 def db_healthy(bypass_breaker: bool = False) -> tuple[bool, str]:
     """Probe the vector store. Used by the deep health check so an instance that
     has lost its database can be taken out of rotation instead of answering

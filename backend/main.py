@@ -67,10 +67,19 @@ async def lifespan(app: FastAPI):
     # over a dependency that may come back on its own, and would break the
     # canned "temporarily unavailable" path that lets users see a real message.
     try:
-        from retriever import db_healthy
+        from retriever import db_healthy, embedder_matches_index
         db_ok, db_detail = await asyncio.to_thread(db_healthy)
         if db_ok:
             log.info("Database ready: %s", db_detail)
+            emb_ok, emb_detail = await asyncio.to_thread(embedder_matches_index)
+            if emb_ok:
+                log.info("Embedder: %s", emb_detail)
+            else:
+                # Not fatal, but everything this server answers from retrieval
+                # will be wrong until it's corrected — so say so unmissably.
+                log.error("EMBEDDER MISMATCH: %s. Retrieval will return "
+                          "near-random chunks. Fix EMBEDDING_MODEL or re-embed "
+                          "the index.", emb_detail)
         else:
             log.error("DATABASE UNAVAILABLE AT STARTUP: %s — the app will serve "
                       "'temporarily unavailable' for content questions until it "
@@ -263,7 +272,7 @@ async def health_deep(request: Request):
     """
     import asyncio
 
-    from retriever import db_healthy
+    from retriever import db_healthy, embedder_matches_index
 
     # ?force=1 bypasses the circuit breaker for an authoritative "is it back
     # yet?" check. Without it this endpoint reports the breaker's view, which
@@ -271,11 +280,16 @@ async def health_deep(request: Request):
     force = request.query_params.get("force") in ("1", "true", "yes")
     db_ok, db_detail = await asyncio.to_thread(db_healthy, force)
     models_ok = retriever_module._embedder is not None and retriever_module._reranker is not None
+    emb_ok, emb_detail = (await asyncio.to_thread(embedder_matches_index)
+                          if db_ok else (True, "not checked (database down)"))
 
     body = {
-        "status": "ok" if db_ok else "degraded",
+        # An embedder mismatch is degraded too: the database is reachable and
+        # full, but every retrieval answer drawn from it is meaningless.
+        "status": "ok" if (db_ok and emb_ok) else "degraded",
         "database": {"ok": db_ok, "detail": db_detail,
                      "breaker": retriever_module._breaker_state()},
+        "embedder": {"ok": emb_ok, "detail": emb_detail},
         "models": {"ok": models_ok},
         "reindex_running": _scheduler.reindex_running(),
         "last_reindex": _scheduler.last_reindex,

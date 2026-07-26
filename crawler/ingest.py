@@ -95,6 +95,114 @@ def get_embedder() -> SentenceTransformer:
     return SentenceTransformer(EMBED_MODEL)
 
 
+# ── Embedder identity guard ──────────────────────────────────────────────────
+# A vector store is only coherent if every row was embedded by the SAME model.
+# Mixing models is silently catastrophic rather than loudly broken: both
+# candidates here are 384-dimensional, so pgvector accepts the write and the
+# HNSW index happily stores two mutually meaningless coordinate systems. Cosine
+# similarity across them is noise, so retrieval quietly returns near-random
+# chunks and the LLM — correctly — reports it can't find the answer.
+#
+# This is not hypothetical. `.env` currently names the fine-tuned embedder while
+# PG_DSN points at the production Supabase instance, and rebuild.sh's comments
+# still describe a local Docker Postgres that is no longer what PG_DSN resolves
+# to. One `./scripts/rebuild.sh` would write a second embedding space into the
+# live index, and --diff mode would interleave the two.
+#
+# So the database records which embedder wrote it, and an ingest that would
+# change that identity refuses to run.
+def embedder_identity(model_ref: str = None) -> str:
+    """Stable name for an embedding model reference.
+
+    Paths reduce to their final component so an absolute local path and the
+    portable name for the same model compare equal — '/Users/x/models/foo' and
+    'foo' are the same thing, and 'sentence-transformers/all-MiniLM-L6-v2' is
+    the same model as 'all-MiniLM-L6-v2'.
+    """
+    ref = (model_ref if model_ref is not None else EMBED_MODEL).strip()
+    return os.path.basename(ref.rstrip("/")) or ref
+
+
+def ensure_meta_table(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            CREATE TABLE IF NOT EXISTS ecen_meta (
+                key        text PRIMARY KEY,
+                value      text NOT NULL,
+                updated_at timestamptz NOT NULL DEFAULT now()
+            );
+        """)
+    conn.commit()
+
+
+def read_stored_embedder(conn) -> str | None:
+    """Which embedder wrote the rows currently in the table, if known."""
+    with conn.cursor() as cur:
+        cur.execute("SELECT to_regclass('public.ecen_meta');")
+        if cur.fetchone()[0] is None:
+            return None
+        cur.execute("SELECT value FROM ecen_meta WHERE key = 'embedding_model';")
+        row = cur.fetchone()
+    return row[0] if row else None
+
+
+def record_embedder(conn) -> None:
+    with conn.cursor() as cur:
+        cur.execute("""
+            INSERT INTO ecen_meta (key, value, updated_at)
+            VALUES ('embedding_model', %s, now())
+            ON CONFLICT (key) DO UPDATE
+              SET value = EXCLUDED.value, updated_at = now();
+        """, (embedder_identity(),))
+    conn.commit()
+
+
+def check_embedder_compatible(conn) -> bool:
+    """False when this ingest would mix a new embedding space into existing rows.
+
+    Only blocks when there is actually something to corrupt: an empty table, or
+    one with no recorded identity, is free to adopt whatever model runs next.
+    """
+    stored = read_stored_embedder(conn)
+    current = embedder_identity()
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT count(*) FROM ecen_docs;")
+        existing_rows = cur.fetchone()[0]
+
+    if stored is None:
+        if existing_rows:
+            log.warning(
+                "No embedder recorded for %d existing rows — assuming they were "
+                "written by '%s'. Recording it now.", existing_rows, current)
+        return True
+
+    if stored == current:
+        log.info("Embedder check OK: '%s' matches the stored index.", current)
+        return True
+
+    if os.getenv("FORCE_EMBEDDER_CHANGE"):
+        log.warning(
+            "EMBEDDER CHANGE FORCED: '%s' → '%s'. Every row must be re-embedded; "
+            "run a FULL ingest (no --diff) or the table will hold two "
+            "incompatible vector spaces.", stored, current)
+        return True
+
+    log.error(
+        "EMBEDDER MISMATCH — refusing to ingest.\n"
+        "  index was built with : %s\n"
+        "  this run would use   : %s   (EMBEDDING_MODEL)\n"
+        "  target database      : %s\n"
+        "Both produce 384-dim vectors, so this would NOT fail loudly — it would "
+        "silently write a second, incompatible embedding space into the index "
+        "and quietly degrade every retrieval.\n"
+        "Fix EMBEDDING_MODEL in .env to '%s', or, if the change is intended, "
+        "re-embed everything: FORCE_EMBEDDER_CHANGE=1 python crawler/ingest.py "
+        "(without --diff).",
+        stored, current, PG_DSN.split("@")[-1], stored)
+    return False
+
+
 # ── Schema setup ─────────────────────────────────────────────────────────────
 def ensure_table(conn) -> None:
     with conn.cursor() as cur:
@@ -158,8 +266,17 @@ def get_existing_hashes(conn) -> dict[str, str]:
 # ── Main ingest ───────────────────────────────────────────────────────────────
 def ingest(diff_mode: bool = False) -> None:
     conn = get_conn()
-    embedder = get_embedder()
     ensure_table(conn)
+    ensure_meta_table(conn)
+
+    # Checked BEFORE the crawl and before the model is loaded: this is the one
+    # failure that must never get far enough to touch the index, and there is no
+    # reason to spend an hour crawling to find out.
+    if not check_embedder_compatible(conn):
+        conn.close()
+        raise SystemExit(2)
+
+    embedder = get_embedder()
 
     log.info("Starting crawl...")
     pages = crawl()
@@ -223,9 +340,12 @@ def ingest(diff_mode: bool = False) -> None:
                 """, (row_id, c.chunk_id, c.url, c.title, c.section,
                       c.text, c.content_hash, now, vec))
     conn.commit()
+    # Record which model produced these vectors, so a later run with a different
+    # EMBEDDING_MODEL is refused instead of silently mixing embedding spaces.
+    record_embedder(conn)
     prune_stale(conn, all_chunks)
     conn.close()
-    log.info("Ingest complete.")
+    log.info("Ingest complete (embedder: %s).", embedder_identity())
 
 
 def prune_stale(conn, all_chunks) -> None:
