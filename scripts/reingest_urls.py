@@ -391,23 +391,36 @@ def fetch_page(url: str) -> PageDoc | None:
 
     text = main.get_text(separator="\n", strip=True)
 
-    # Fix encoding artifacts from smart quotes and special chars
+    # Fix encoding artifacts from smart quotes and special chars.
+    #
+    # Every key is spelled with explicit \u escapes on purpose. These strings
+    # are mojibake -- UTF-8 bytes that were decoded under the wrong codec -- so
+    # some of them contain literal quote characters and invisible C1 control
+    # codes. Writing them as escapes keeps the table readable, immune to editors
+    # and copy-paste mangling the bytes, and impossible to break the way it was:
+    # two keys had been corrupted into bare ASCII quotes, which terminated the
+    # string early and made this entire module a SyntaxError. It could not be
+    # imported at all -- and CI never noticed, because the py_compile gate only
+    # covered backend/ and crawler/.
+    #
+    # A UTF-8 sequence E2 80 XX misread as latin-1 becomes U+00E2 U+0080 U+00XX;
+    # misread as cp1252 it becomes U+00E2 U+20AC <cp1252[XX]>. Both families are
+    # covered, one entry per original character.
     replacements = {
-        "â\x99": "'",
-        "â\x93": "–",
-        "â\x94": "—",
-        "â\x9c": "“",
-        "â\x9d": "”",
-        "â\xa2": "•",
-        "â\x80\x99": "'",
-        "â\x80\x93": "–",
-        "â\x80\x94": "—",
-        "â€™": "'",
-        "â€"": "–",
-        "â€"": "—",
-        "â€œ": '"',
-        "â€\x9d": '"',
-        "â€¢": "•",
+        # -- UTF-8 misread as latin-1 --
+        "\u00e2\u0080\u0099": "\u2019",   # right single quote
+        "\u00e2\u0080\u0093": "\u2013",   # en dash
+        "\u00e2\u0080\u0094": "\u2014",   # em dash
+        "\u00e2\u0080\u009c": "\u201c",   # left double quote
+        "\u00e2\u0080\u009d": "\u201d",   # right double quote
+        "\u00e2\u0080\u00a2": "\u2022",   # bullet
+        # -- UTF-8 misread as cp1252 --
+        "\u00e2\u20ac\u2122": "\u2019",
+        "\u00e2\u20ac\u201c": "\u2013",
+        "\u00e2\u20ac\u201d": "\u2014",
+        "\u00e2\u20ac\u0153": "\u201c",
+        "\u00e2\u20ac\u009d": "\u201d",   # 0x9D is undefined in cp1252
+        "\u00e2\u20ac\u00a2": "\u2022",
     }
     for bad, good in replacements.items():
         text = text.replace(bad, good)

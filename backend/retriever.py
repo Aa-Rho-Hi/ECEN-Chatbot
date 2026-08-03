@@ -19,6 +19,7 @@ from contextlib import contextmanager
 from typing import Optional
 
 import psycopg2
+import psycopg2.pool  # noqa: F401  — needed for psycopg2.pool.PoolError below
 from pgvector.psycopg2 import register_vector
 from dotenv import load_dotenv
 from rank_bm25 import BM25Okapi
@@ -138,6 +139,146 @@ POOL_MAX = int(os.getenv("PG_POOL_MAX", "16"))
 # holds a reference) so their ids stay stable for the life of the process.
 _registered_conn_ids: set[int] = set()
 
+# Connections that have been idle in the pool longer than this are validated
+# with a cheap `SELECT 1` before use. Managed Postgres front-ends (the Supabase
+# pooler, PgBouncer, cloud NAT/idle timeouts) silently close server-side
+# connections after a few minutes of inactivity. psycopg2 has no way to know —
+# `conn.closed` still reads 0 — so the pool happily hands back a corpse and
+# every query fails until the process restarts. Validating only *idle* checkouts
+# keeps the hot path free of an extra round trip.
+POOL_VALIDATE_IDLE_SECS = float(os.getenv("PG_VALIDATE_IDLE_SECS", "60"))
+# How long to wait for a free connection when all POOL_MAX are checked out,
+# rather than failing the request instantly with a PoolError.
+POOL_ACQUIRE_TIMEOUT = float(os.getenv("PG_ACQUIRE_TIMEOUT", "5"))
+# id(conn) → monotonic timestamp of its last successful use.
+_conn_last_used: dict[int, float] = {}
+
+
+# ── Circuit breaker ──────────────────────────────────────────────────────────
+# When the database is unreachable, psycopg2 still spends connect_timeout (10s)
+# on every single attempt before giving up — and ThreadedConnectionPool opens
+# POOL_MIN connections eagerly, so a failed pool build costs that much again.
+# During the 2026-07-26 Supabase pause that meant every request occupied a
+# worker thread for ~10s to produce an error it could have produced instantly.
+# A handful of concurrent users was enough to stall the whole service.
+#
+# The breaker trips after a few consecutive connection failures and then fails
+# in microseconds for a cooldown window, so the app stays responsive and returns
+# its "temporarily unavailable" message immediately. After the cooldown one
+# request is allowed through as a probe (half-open); if it succeeds the breaker
+# resets, so recovery is automatic and needs no restart.
+BREAKER_THRESHOLD = int(os.getenv("PG_BREAKER_THRESHOLD", "3"))
+BREAKER_COOLDOWN = float(os.getenv("PG_BREAKER_COOLDOWN", "30"))
+
+_breaker_failures = 0
+_breaker_opened_at = 0.0
+_breaker_lock = threading.Lock()
+
+
+class DatabaseUnavailable(RuntimeError):
+    """The circuit breaker is open — the database is known to be down, so this
+    request failed immediately instead of waiting out a connection timeout."""
+
+
+def _breaker_state() -> dict:
+    """Snapshot for the deep health check / diagnostics."""
+    import time as _t
+    with _breaker_lock:
+        open_ = _breaker_failures >= BREAKER_THRESHOLD
+        remaining = 0.0
+        if open_:
+            remaining = max(0.0, BREAKER_COOLDOWN - (_t.monotonic() - _breaker_opened_at))
+        return {"open": open_, "consecutive_failures": _breaker_failures,
+                "cooldown_remaining_s": round(remaining, 1)}
+
+
+def _breaker_check() -> None:
+    """Fail fast while the breaker is open and still cooling down."""
+    import time as _t
+    if BREAKER_THRESHOLD <= 0:
+        return
+    with _breaker_lock:
+        if _breaker_failures < BREAKER_THRESHOLD:
+            return
+        waited = _t.monotonic() - _breaker_opened_at
+        if waited < BREAKER_COOLDOWN:
+            raise DatabaseUnavailable(
+                f"database circuit breaker open "
+                f"({_breaker_failures} consecutive failures, retrying in "
+                f"{BREAKER_COOLDOWN - waited:.0f}s)")
+        # Cooldown elapsed — let this caller through as a half-open probe.
+        log.info("PG breaker half-open: probing after %.0fs cooldown", waited)
+
+
+def _breaker_record_failure() -> None:
+    import time as _t
+    global _breaker_failures, _breaker_opened_at
+    with _breaker_lock:
+        _breaker_failures += 1
+        if _breaker_failures == BREAKER_THRESHOLD:
+            log.error("PG breaker OPEN after %d consecutive failures — failing "
+                      "fast for %.0fs", _breaker_failures, BREAKER_COOLDOWN)
+        # Re-arm the cooldown on every failure at/after the threshold so a
+        # failing half-open probe doesn't leave the breaker instantly re-open
+        # for the next caller.
+        if _breaker_failures >= BREAKER_THRESHOLD:
+            _breaker_opened_at = _t.monotonic()
+
+
+def _breaker_record_success() -> None:
+    global _breaker_failures
+    with _breaker_lock:
+        if _breaker_failures:
+            log.info("PG breaker reset after a successful query")
+        _breaker_failures = 0
+
+
+def _discard(pool, conn) -> None:
+    """Return a connection to the pool as closed, so the pool replaces it with a
+    fresh one instead of recycling a connection we know is broken."""
+    try:
+        _registered_conn_ids.discard(id(conn))
+        _conn_last_used.pop(id(conn), None)
+        pool.putconn(conn, close=True)
+    except Exception:  # noqa: BLE001
+        log.warning("Failed to discard broken PG connection", exc_info=True)
+
+
+def _acquire(pool):
+    """getconn() with a bounded wait instead of an immediate PoolError.
+
+    Under a burst of concurrent chats every connection can be checked out for a
+    moment; failing the request outright when waiting ~1s would have served it
+    turns a load spike into visible errors."""
+    import time as _t
+    deadline = _t.monotonic() + POOL_ACQUIRE_TIMEOUT
+    delay = 0.02
+    while True:
+        try:
+            return pool.getconn()
+        except psycopg2.pool.PoolError:
+            if _t.monotonic() >= deadline:
+                log.error("PG pool exhausted (max=%d) after %.1fs", POOL_MAX,
+                          POOL_ACQUIRE_TIMEOUT)
+                raise
+            _t.sleep(delay)
+            delay = min(delay * 2, 0.25)
+
+
+def _is_usable(conn) -> bool:
+    """True if the connection still answers. Only called on connections that
+    have been idle long enough to plausibly have been dropped upstream."""
+    if conn.closed:
+        return False
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT 1")
+            cur.fetchone()
+        conn.rollback()
+        return True
+    except Exception:  # noqa: BLE001
+        return False
+
 
 def _get_pool():
     global _POOL
@@ -151,18 +292,163 @@ def _get_pool():
                     host_part = "(unknown)"
                 log.info("Creating PG connection pool at %s (min=%d max=%d)…",
                          host_part, POOL_MIN, POOL_MAX)
-                _POOL = _pg_pool.ThreadedConnectionPool(
+                # Build into a local first and only publish to _POOL once setup
+                # succeeded. Assigning up front meant a transient DB blip during
+                # the one-time DDL left a half-initialized pool installed for the
+                # life of the process, with no path to retry.
+                pool = _pg_pool.ThreadedConnectionPool(
                     POOL_MIN, POOL_MAX, PG_DSN, connect_timeout=10)
-                # One-time extension setup — NOT on the per-request hot path.
-                conn = _POOL.getconn()
                 try:
-                    with conn.cursor() as cur:
-                        cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
-                        cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
-                    conn.commit()
-                finally:
-                    _POOL.putconn(conn)
+                    # One-time extension setup — NOT on the per-request hot path.
+                    conn = pool.getconn()
+                    try:
+                        with conn.cursor() as cur:
+                            cur.execute("CREATE EXTENSION IF NOT EXISTS vector;")
+                            cur.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm;")
+                        conn.commit()
+                    finally:
+                        pool.putconn(conn)
+                except Exception:
+                    try:
+                        pool.closeall()
+                    except Exception:  # noqa: BLE001
+                        pass
+                    log.exception("PG pool setup failed; will retry on next use")
+                    raise
+                _POOL = pool
     return _POOL
+
+
+def embedder_identity(model_ref: Optional[str] = None) -> str:
+    """Stable name for an embedding model reference (mirrors ingest.py).
+
+    Paths reduce to their final component, so an absolute local path and the
+    portable name for the same model compare equal.
+    """
+    ref = (model_ref if model_ref is not None else EMBED_MODEL).strip()
+    return os.path.basename(ref.rstrip("/")) or ref
+
+
+def embedder_matches_index() -> tuple[bool, str]:
+    """Is the query embedder the same one that wrote the stored vectors?
+
+    A mismatch is silent, not loud: both models here are 384-dimensional, so
+    pgvector accepts every query and simply returns near-random neighbours from
+    an incompatible coordinate system. Retrieval then looks "working but bad",
+    which is indistinguishable from a content gap without this check.
+    """
+    current = embedder_identity()
+    try:
+        with _conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT to_regclass('public.ecen_meta');")
+            if cur.fetchone()[0] is None:
+                return True, f"{current} (index predates embedder tracking)"
+            cur.execute("SELECT value FROM ecen_meta WHERE key = 'embedding_model';")
+            row = cur.fetchone()
+    except Exception as e:  # noqa: BLE001
+        return True, f"unknown ({type(e).__name__})"
+
+    if not row:
+        return True, f"{current} (no embedder recorded)"
+    stored = row[0]
+    if stored == current:
+        return True, current
+    return False, (f"MISMATCH: index built with '{stored}' but queries use "
+                   f"'{current}' — retrieval results are meaningless")
+
+
+def db_healthy(bypass_breaker: bool = False) -> tuple[bool, str]:
+    """Probe the vector store. Used by the deep health check so an instance that
+    has lost its database can be taken out of rotation instead of answering
+    every question with 'I couldn't find anything on the website'.
+
+    bypass_breaker forces a real connection attempt even while the breaker is
+    open — useful for an explicit "is it back yet?" check, at the cost of
+    waiting out the connect timeout.
+    """
+    global _breaker_failures
+    try:
+        if bypass_breaker:
+            with _breaker_lock:
+                _breaker_failures = 0
+        with _conn() as conn, conn.cursor() as cur:
+            cur.execute("SELECT count(*) FROM ecen_docs")
+            (n,) = cur.fetchone()
+        if not n:
+            return False, "ecen_docs is empty"
+        return True, f"{n} chunks"
+    except DatabaseUnavailable as e:
+        return False, str(e)
+    except Exception as e:  # noqa: BLE001
+        return False, f"{type(e).__name__}: {e}"
+
+
+def _checkout(pool):
+    """A connection that is live and has the pgvector adapter registered.
+
+    Discards and replaces connections the upstream pooler dropped while they sat
+    idle, so a quiet period can't poison the pool. Tries a bounded number of
+    times: if several pooled connections have gone stale at once (e.g. the whole
+    pool aged out overnight) we want to cycle past all of them, not give up on
+    the first corpse.
+    """
+    import time as _t
+    last_err: Exception | None = None
+    for _ in range(POOL_MAX + 1):
+        conn = _acquire(pool)
+        idle_for = _t.monotonic() - _conn_last_used.get(id(conn), 0.0)
+        if idle_for > POOL_VALIDATE_IDLE_SECS and not _is_usable(conn):
+            log.info("Discarding PG connection idle for %.0fs — upstream closed it",
+                     idle_for)
+            _discard(pool, conn)
+            continue
+        try:
+            if id(conn) not in _registered_conn_ids:
+                register_vector(conn)
+                _registered_conn_ids.add(id(conn))
+            return conn
+        except Exception as e:  # noqa: BLE001
+            last_err = e
+            _discard(pool, conn)
+    raise RuntimeError("Could not obtain a usable PG connection") from last_err
+
+
+@contextmanager
+def _conn_from_pool(pool):
+    """Core checkout/checkin logic against an explicit pool.
+
+    Split out from _conn() so the failure paths can be unit-tested without a
+    live Postgres (see tests/test_db_pool_resilience.py).
+
+    Connections that error out are closed rather than recycled — returning a
+    connection in an unknown state to the pool spreads one failure across every
+    later request that happens to draw it.
+    """
+    import time as _t
+    conn = _checkout(pool)
+    broken = False
+    try:
+        yield conn
+        # End the implicit read transaction cleanly (also discards any
+        # SET LOCAL, e.g. the fuzzy threshold) so the next checkout is fresh.
+        conn.rollback()
+        _conn_last_used[id(conn)] = _t.monotonic()
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        # Connection-level failure: this socket is not reusable.
+        broken = True
+        raise
+    except Exception:
+        try:
+            conn.rollback()
+            _conn_last_used[id(conn)] = _t.monotonic()
+        except Exception:
+            broken = True
+        raise
+    finally:
+        if broken:
+            _discard(pool, conn)
+        else:
+            pool.putconn(conn)
 
 
 @contextmanager
@@ -172,25 +458,26 @@ def _conn():
     Each retrieval arm calls this independently, so parallel arms get distinct
     connections (no shared-connection concurrency bug) without paying a fresh
     connect()/DDL on every request.
+
+    Guarded by the circuit breaker: while the database is known to be down this
+    raises DatabaseUnavailable immediately rather than spending 10s of connect
+    timeout per request. Callers in main.py already degrade any retrieval
+    exception into the user-facing "temporarily unavailable" message.
     """
-    pool = _get_pool()
-    conn = pool.getconn()
+    _breaker_check()
     try:
-        if id(conn) not in _registered_conn_ids:
-            register_vector(conn)
-            _registered_conn_ids.add(id(conn))
-        yield conn
-        # End the implicit read transaction cleanly (also discards any
-        # SET LOCAL, e.g. the fuzzy threshold) so the next checkout is fresh.
-        conn.rollback()
+        pool = _get_pool()
     except Exception:
-        try:
-            conn.rollback()
-        except Exception:
-            pass
+        # Pool construction itself failed — the database is unreachable.
+        _breaker_record_failure()
         raise
-    finally:
-        pool.putconn(conn)
+    try:
+        with _conn_from_pool(pool) as conn:
+            yield conn
+    except (psycopg2.OperationalError, psycopg2.InterfaceError):
+        _breaker_record_failure()
+        raise
+    _breaker_record_success()
 
 
 def _get_device() -> str:
@@ -275,6 +562,25 @@ def _row_to_chunk(row) -> dict:
     }
 
 
+# Directory roster documents (crawler.py builds one per role: Faculty,
+# Leadership, Emeritus Faculty, Qatar Faculty, Staff...). Each is a single chunk
+# listing every person in that role, so they are long and dense with proper
+# nouns — which makes them *attractor documents* in vector space: they score
+# plausibly against almost any question and crowd out the specific page the user
+# wanted. Asking "what research areas does ECE specialize in" returned the
+# Qatar, Leadership and Emeritus rosters as its top three sources and not one
+# research page.
+#
+# They are excluded from the DENSE arm only. They still exist as chunks and are
+# still reachable through the keyword (FTS) and fuzzy (trigram) arms, which is
+# what actually matters: those questions name the role out loud ("who are the
+# emeritus faculty", "who is in ECE leadership"), so lexical matching finds them
+# reliably. This is deliberately not a blanket exclusion — graph.json holds only
+# the 71 teaching faculty, so these chunks are the ONLY source for leadership,
+# emeritus, Qatar and staff questions and must stay retrievable.
+ROSTER_URL_PATTERN = "%/profiles/index.html#%"
+
+
 def _dense_search(query_vec: list[float], section_filter: Optional[str] = None) -> list[dict]:
     with _conn() as conn, conn.cursor() as cur:
         if section_filter:
@@ -282,18 +588,19 @@ def _dense_search(query_vec: list[float], section_filter: Optional[str] = None) 
                 SELECT chunk_id, url, title, section, text,
                        1 - (embedding <=> %s::vector) AS score
                 FROM ecen_docs
-                WHERE section = %s
+                WHERE section = %s AND url NOT LIKE %s
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
-            """, (query_vec, section_filter, query_vec, DENSE_TOP_K))
+            """, (query_vec, section_filter, ROSTER_URL_PATTERN, query_vec, DENSE_TOP_K))
         else:
             cur.execute("""
                 SELECT chunk_id, url, title, section, text,
                        1 - (embedding <=> %s::vector) AS score
                 FROM ecen_docs
+                WHERE url NOT LIKE %s
                 ORDER BY embedding <=> %s::vector
                 LIMIT %s;
-            """, (query_vec, query_vec, DENSE_TOP_K))
+            """, (query_vec, ROSTER_URL_PATTERN, query_vec, DENSE_TOP_K))
         return [_row_to_chunk(r) for r in cur.fetchall()]
 
 

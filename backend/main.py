@@ -18,19 +18,22 @@ from typing import Optional
 from dotenv import load_dotenv
 load_dotenv(override=True)
 
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
-from generator import generate, generate_stream, route_question, generate as _generate_full
+from generator import (generate, generate_stream, route_question,
+                       generate as _generate_full, LLMGatewayError)
 from retriever import retrieve_async, _people_area_topic, _people_by_area, _get_embedder, _get_reranker
+import retriever as retriever_module
 from graph_retriever import (
     graph_query, build_area_roster, build_intersection_roster, is_full_faculty_query,
     build_full_faculty_roster, faculty_roster_sources, research_area_names,
     is_degree_list_query, build_degree_roster, find_faculty_mentions,
+    is_area_list_query, build_area_list_roster,
 )
 from scheduler import create_scheduler, run_reindex
 import scheduler as _scheduler
@@ -53,6 +56,36 @@ async def lifespan(app: FastAPI):
         asyncio.to_thread(_get_reranker),
     )
     log.info("Models ready.")
+
+    # Probe the database at startup. The connection pool is otherwise built
+    # lazily on the first question, so an instance with an unreachable database
+    # logs "Application startup complete", looks healthy, and only reveals the
+    # problem when a user asks something — that is exactly how the 2026-07-26
+    # Supabase pause went unnoticed for seven minutes with a live URL.
+    #
+    # Deliberately NON-fatal: refusing to start would take the whole app down
+    # over a dependency that may come back on its own, and would break the
+    # canned "temporarily unavailable" path that lets users see a real message.
+    try:
+        from retriever import db_healthy, embedder_matches_index
+        db_ok, db_detail = await asyncio.to_thread(db_healthy)
+        if db_ok:
+            log.info("Database ready: %s", db_detail)
+            emb_ok, emb_detail = await asyncio.to_thread(embedder_matches_index)
+            if emb_ok:
+                log.info("Embedder: %s", emb_detail)
+            else:
+                # Not fatal, but everything this server answers from retrieval
+                # will be wrong until it's corrected — so say so unmissably.
+                log.error("EMBEDDER MISMATCH: %s. Retrieval will return "
+                          "near-random chunks. Fix EMBEDDING_MODEL or re-embed "
+                          "the index.", emb_detail)
+        else:
+            log.error("DATABASE UNAVAILABLE AT STARTUP: %s — the app will serve "
+                      "'temporarily unavailable' for content questions until it "
+                      "recovers. Check /health/deep.", db_detail)
+    except Exception:  # noqa: BLE001
+        log.exception("Database startup probe failed unexpectedly")
 
     # On Cloud Run the CPU is only allocated during requests, so the in-process
     # APScheduler won't fire reliably — set DISABLE_SCHEDULER=1 there and drive
@@ -91,6 +124,21 @@ app = FastAPI(
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception):
+    """Last line of defence. FastAPI's default returns the traceback when the
+    server runs with debug on, and the exception message can carry the DSN
+    (psycopg2 puts the full connection string in OperationalError text). Log the
+    detail server-side, return an opaque body."""
+    from fastapi.responses import JSONResponse
+    log.exception("Unhandled error on %s %s", request.method, request.url.path)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Internal server error. Please try again."},
+    )
+
 
 _raw_origins = os.getenv("ALLOWED_ORIGINS", "http://localhost:3000")
 ALLOWED_ORIGINS = [o.strip() for o in _raw_origins.split(",") if o.strip()]
@@ -156,10 +204,99 @@ class ReportRequest(BaseModel):
         description="Optional context, e.g. the recent question and answer.")
 
 
+# ── Admin authentication ─────────────────────────────────────────────────────
+# /admin/* can start a full site crawl, dump usage stats, and spend LLM credits.
+# These were open to anyone who knew the path: a loop over /admin/reindex was a
+# free way to stack crawlers against the department's web server.
+ADMIN_TOKEN = os.getenv("ADMIN_TOKEN", "")
+# Escape hatch for local development only; never set this in a deployed env.
+ALLOW_INSECURE_ADMIN = os.getenv("ALLOW_INSECURE_ADMIN") == "1"
+
+if not ADMIN_TOKEN and not ALLOW_INSECURE_ADMIN:
+    log.warning("ADMIN_TOKEN is not set — /admin/* endpoints will refuse all "
+                "requests. Set ADMIN_TOKEN (and send it as X-Admin-Token) to "
+                "enable them.")
+
+
+# asyncio.create_task only holds a weak reference to the task; without a strong
+# one the event loop may garbage-collect a long-running background job mid-flight.
+_BACKGROUND_TASKS: set = set()
+
+
+def _log_task_exception(task) -> None:
+    if task.cancelled():
+        return
+    exc = task.exception()
+    if exc:
+        log.error("Background task failed: %s", exc, exc_info=exc)
+
+
+async def require_admin(request: Request) -> None:
+    """Constant-time shared-token check on the X-Admin-Token header.
+
+    Fails closed: with no ADMIN_TOKEN configured the endpoints are disabled
+    rather than open, so a missing env var in a new deployment can't silently
+    expose them."""
+    import hmac
+
+    if ALLOW_INSECURE_ADMIN:
+        return
+    if not ADMIN_TOKEN:
+        raise HTTPException(
+            status_code=503,
+            detail="Admin endpoints are disabled (ADMIN_TOKEN not configured).")
+    supplied = request.headers.get("x-admin-token", "")
+    if not supplied or not hmac.compare_digest(supplied, ADMIN_TOKEN):
+        log.warning("Rejected /admin request from %s", _client_ip(request))
+        raise HTTPException(status_code=401, detail="Invalid or missing admin token.")
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 @app.get("/health")
 async def health():
+    """Liveness only — deliberately cheap, no I/O, so the platform's health
+    probe can't be slowed down or failed by a slow dependency. Use
+    /health/deep for a real dependency check."""
     return {"status": "ok", "last_reindex": _scheduler.last_reindex}
+
+
+@app.get("/health/deep")
+async def health_deep(request: Request):
+    """Readiness: is this instance actually able to answer questions?
+
+    Returns 503 when the vector store is unreachable or empty. The shallow
+    /health check returns ok in that state, which meant an instance that had
+    lost its database stayed in rotation and answered every question with the
+    'I couldn't find anything' fallback — a data outage disguised as a content
+    gap.
+    """
+    import asyncio
+
+    from retriever import db_healthy, embedder_matches_index
+
+    # ?force=1 bypasses the circuit breaker for an authoritative "is it back
+    # yet?" check. Without it this endpoint reports the breaker's view, which
+    # is what the chat path will actually experience right now.
+    force = request.query_params.get("force") in ("1", "true", "yes")
+    db_ok, db_detail = await asyncio.to_thread(db_healthy, force)
+    models_ok = retriever_module._embedder is not None and retriever_module._reranker is not None
+    emb_ok, emb_detail = (await asyncio.to_thread(embedder_matches_index)
+                          if db_ok else (True, "not checked (database down)"))
+
+    body = {
+        # An embedder mismatch is degraded too: the database is reachable and
+        # full, but every retrieval answer drawn from it is meaningless.
+        "status": "ok" if (db_ok and emb_ok) else "degraded",
+        "database": {"ok": db_ok, "detail": db_detail,
+                     "breaker": retriever_module._breaker_state()},
+        "embedder": {"ok": emb_ok, "detail": emb_detail},
+        "models": {"ok": models_ok},
+        "reindex_running": _scheduler.reindex_running(),
+        "last_reindex": _scheduler.last_reindex,
+    }
+    if not db_ok:
+        raise HTTPException(status_code=503, detail=body)
+    return body
 
 
 # In-memory usage counters (reset on instance restart; durable analytics live
@@ -189,7 +326,7 @@ async def feedback(request: Request, req: FeedbackRequest):
     return {"ok": True}
 
 
-@app.get("/admin/stats")
+@app.get("/admin/stats", dependencies=[Depends(require_admin)])
 async def stats():
     """Lightweight usage counters since this instance started."""
     return {
@@ -240,10 +377,11 @@ async def report_issue(request: Request, req: ReportRequest):
 
 # URLs of synthetic, code-generated context chunks — excluded from cited sources.
 _SYNTHETIC_URLS = {"knowledge-graph", "research-area-roster", "faculty-roster",
-                   "degree-roster", "about:eira"}
+                   "degree-roster", "research-area-list", "about:eira"}
 # Roster paths supply their own already-curated, relevant source list — keep all
 # of those; only the open-ended retrieval path needs trimming.
-_ROSTER_URLS = {"research-area-roster", "faculty-roster", "degree-roster"}
+_ROSTER_URLS = {"research-area-roster", "faculty-roster", "degree-roster",
+                "research-area-list"}
 # Max sources to cite on the normal retrieval path (we feed more chunks to the
 # LLM for answer completeness, but only cite the few most relevant).
 MAX_SOURCES = 6
@@ -373,6 +511,13 @@ _REFUSAL_TEXT = ("I can't help with that — but I'm happy to answer questions a
 _NO_INFO_TEXT = ("I couldn't find anything reliable on the department website about that. "
                  "Could you rephrase, or ask me about programs, courses, research areas, "
                  "faculty, admissions, or events?")
+# Distinct from _NO_INFO_TEXT on purpose. When the database or the LLM gateway
+# is down we must NOT say "I couldn't find anything on the website" — that
+# blames the content for an infrastructure problem, and it trains users to stop
+# asking questions that would work fine once the service recovers.
+_UNAVAILABLE_TEXT = ("Sorry — I'm having trouble reaching my knowledge base right now. "
+                     "This is a temporary problem on my end, not a problem with your "
+                     "question. Please try again in a moment.")
 
 # Secrets that must never appear in output (defense in depth; the corpus is
 # public web pages, but the model sees env-derived strings in error paths).
@@ -587,6 +732,23 @@ async def _prepare_chunks(req: "ChatRequest", route: Optional[dict] = None,
                        if c["url"] not in seen and not seen.add(c["url"])]
             return [roster_chunk] + deduped
 
+    # Authoritative complete research-area list from the graph. Without this,
+    # "what research areas does ECE specialize in" went to open-ended retrieval,
+    # where the `research` section is ~40 of ~1,860 chunks against ~836 news
+    # chunks — the top-k filled with news and the model answered "I don't have
+    # specific details" even with a perfectly healthy database.
+    if is_area_list_query(req.question):
+        roster = build_area_list_roster()
+        if roster:
+            log.info("Research-area roster injected for %r", req.question)
+            return [
+                {"url": "research-area-list", "title": "TAMU ECE Research Areas",
+                 "section": "graph", "text": roster, "rerank_score": 10.0},
+                {"url": "https://engineering.tamu.edu/electrical/research/index.html",
+                 "title": "Research | Texas A&M University Engineering",
+                 "section": "research", "text": "", "rerank_score": 0.0},
+            ]
+
     # Authoritative complete degree-program list from the graph, so the answer
     # never drops newer programs (Microelectronics MS, certificates, minor) that
     # a stale crawled degrees page omits.
@@ -696,7 +858,16 @@ async def chat_stream(request: Request, req: ChatRequest):
     import time as _t
     _t_req = _t.perf_counter()
     history = _history_dicts(req)
-    search_req, route, prefetched = await _route(req)
+    try:
+        search_req, route, prefetched = await _route(req)
+    except Exception:  # noqa: BLE001
+        # Routing touches the DB (people-by-area lookups). A retrieval-layer
+        # outage must not surface as a raw 500 — the UI renders SSE, so a
+        # non-stream error response leaves the user staring at a dead spinner.
+        log.exception("Routing failed for %r", req.question)
+        _audit(request, req.question, req.question, None, [], _UNAVAILABLE_TEXT,
+               flagged="routing_error")
+        return _canned_stream(_UNAVAILABLE_TEXT)
     log.info("TIMING route+retrieval: %.2fs (intent=%s) for %r",
              _t.perf_counter() - _t_req, (route or {}).get("intent"), req.question)
 
@@ -717,7 +888,13 @@ async def chat_stream(request: Request, req: ChatRequest):
                    cached_sources, answer, flagged="cache_hit")
             return _canned_stream(answer, cached_sources)
 
-    chunks = _gate_context(await _prepare_chunks(search_req, route, prefetched=prefetched))
+    try:
+        chunks = _gate_context(await _prepare_chunks(search_req, route, prefetched=prefetched))
+    except Exception:  # noqa: BLE001
+        log.exception("Retrieval failed for %r", search_req.question)
+        _audit(request, req.question, search_req.question, route, [],
+               _UNAVAILABLE_TEXT, flagged="retrieval_error")
+        return _canned_stream(_UNAVAILABLE_TEXT)
     log.info("TIMING through prepare_chunks: %.2fs (%d chunks)",
              _t.perf_counter() - _t_req, len(chunks))
     if not chunks:
@@ -784,13 +961,27 @@ async def chat_stream(request: Request, req: ChatRequest):
         # If streaming produced nothing, fall back to a buffered generation
         # (and retry with a single chunk) so the user never sees an empty reply.
         if emitted == 0:
-            answer = await _generate_full(gen_question, chunks, history=history)
-            if not answer and len(chunks) > 1:
-                log.warning("Empty answer with %d chunks, retrying with 1 chunk", len(chunks))
-                answer = await _generate_full(req.question, chunks[:1])
-            if not answer:
-                answer = ("I don't have enough details to answer that — please "
-                          "check the sources below or visit engineering.tamu.edu/electrical.")
+            try:
+                answer = await _generate_full(gen_question, chunks, history=history)
+                if not answer and len(chunks) > 1:
+                    log.warning("Empty answer with %d chunks, retrying with 1 chunk", len(chunks))
+                    answer = await _generate_full(req.question, chunks[:1])
+                if not answer:
+                    answer = ("I don't have enough details to answer that — please "
+                              "check the sources below or visit engineering.tamu.edu/electrical.")
+            except LLMGatewayError as e:
+                # Both the streaming and buffered attempts hit the gateway.
+                # Say so plainly instead of implying the answer isn't on the
+                # website — and never let the exception escape the generator,
+                # which would abort the SSE stream without a [DONE] and hang
+                # the client's reader.
+                log.error("LLM gateway unavailable: %s", e)
+                _STATS["flags"]["llm_unavailable"] += 1
+                answer = _UNAVAILABLE_TEXT
+            except Exception:  # noqa: BLE001
+                log.exception("Buffered generation failed")
+                _STATS["flags"]["generation_error"] += 1
+                answer = _UNAVAILABLE_TEXT
             answer = _redact(answer)
             answer_acc += answer
             yield f"data: {answer.replace(chr(10), chr(92) + 'n')}\n\n"
@@ -815,13 +1006,25 @@ async def chat_sync(request: Request, req: ChatRequest):
         return ChatResponse(answer=_REFUSAL_TEXT, sources=[])
 
     history = _history_dicts(req)
-    search_req, route, prefetched = await _route(req)
+    try:
+        search_req, route, prefetched = await _route(req)
+    except Exception:  # noqa: BLE001
+        log.exception("Routing failed for %r", req.question)
+        _audit(request, req.question, req.question, None, [], _UNAVAILABLE_TEXT,
+               flagged="routing_error")
+        raise HTTPException(status_code=503, detail=_UNAVAILABLE_TEXT)
     if route and route.get("suspicious"):
         _audit(request, req.question, search_req.question, route, [],
                _REFUSAL_TEXT, flagged="injection_llm")
         return ChatResponse(answer=_REFUSAL_TEXT, sources=[])
 
-    chunks = _gate_context(await _prepare_chunks(search_req, route, prefetched=prefetched))
+    try:
+        chunks = _gate_context(await _prepare_chunks(search_req, route, prefetched=prefetched))
+    except Exception:  # noqa: BLE001
+        log.exception("Retrieval failed for %r", search_req.question)
+        _audit(request, req.question, search_req.question, route, [],
+               _UNAVAILABLE_TEXT, flagged="retrieval_error")
+        raise HTTPException(status_code=503, detail=_UNAVAILABLE_TEXT)
     if not chunks:
         _audit(request, req.question, search_req.question, route, [],
                _NO_INFO_TEXT, flagged="no_reliable_context")
@@ -830,7 +1033,17 @@ async def chat_sync(request: Request, req: ChatRequest):
     gen_question = req.question if search_req.question == req.question else (
         f"{req.question}\n(In the context of this conversation, this means: "
         f"{search_req.question})")
-    answer = _redact(await generate(gen_question, chunks, history=history))
+    try:
+        answer = _redact(await generate(gen_question, chunks, history=history))
+    except LLMGatewayError as e:
+        # 503 (not 200 with an apology) so eval harnesses and the frontend can
+        # tell an outage apart from a genuine "no answer" — otherwise a bad
+        # gateway day silently scores as a retrieval-quality regression.
+        log.error("LLM gateway unavailable: %s", e)
+        _STATS["flags"]["llm_unavailable"] += 1
+        _audit(request, req.question, search_req.question, route, [],
+               _UNAVAILABLE_TEXT, flagged="llm_unavailable")
+        raise HTTPException(status_code=503, detail=_UNAVAILABLE_TEXT) from e
     sources = [Source(url=c["url"], title=c["title"], section=c["section"])
                for c in _select_sources(chunks)]
     _audit(request, req.question, search_req.question, route,
@@ -841,8 +1054,10 @@ async def chat_sync(request: Request, req: ChatRequest):
     return ChatResponse(answer=answer, sources=sources, context=ctx)
 
 
-@app.get("/admin/test-llm", summary="Test LLM with a minimal prompt")
-async def test_llm():
+@app.get("/admin/test-llm", summary="Test LLM with a minimal prompt",
+         dependencies=[Depends(require_admin)])
+@limiter.limit(REPORT_RATE_LIMIT)
+async def test_llm(request: Request):
     """Sends a trivial prompt to the LLM and returns the answer plus timings.
 
     This isolates the model: no retrieval, no reranking, a one-line prompt. If
@@ -888,11 +1103,24 @@ async def test_llm():
     }
 
 
-@app.post("/admin/reindex", summary="Manually trigger a site re-index")
+@app.post("/admin/reindex", summary="Manually trigger a site re-index",
+          dependencies=[Depends(require_admin)])
 async def manual_reindex():
-    """Kicks off a diff re-index in the background."""
+    """Kicks off a diff re-index in the background, unless one is already
+    running — overlapping crawls hammer the department site and race each
+    other's upserts."""
     import asyncio
-    asyncio.create_task(run_reindex())
+
+    if _scheduler.reindex_running():
+        return {"status": "already_running", "last_reindex": _scheduler.last_reindex}
+
+    task = asyncio.create_task(run_reindex())
+    # Keep a reference so the task isn't garbage-collected mid-flight, and make
+    # sure a crash inside it is logged rather than swallowed as a "never
+    # retrieved" exception.
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    task.add_done_callback(_log_task_exception)
     return {"status": "re-index started"}
 
 

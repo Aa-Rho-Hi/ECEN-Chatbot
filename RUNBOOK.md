@@ -175,8 +175,53 @@ Wait for `Models ready.` then `Uvicorn running on http://0.0.0.0:8000`
 Sanity check: `curl http://127.0.0.1:8000/health`.
 
 Backend endpoints: `POST /chat` (SSE stream), `POST /chat/sync` (JSON),
-`GET /health`, `POST /feedback`, `POST /report-issue`, `GET /admin/stats`,
-`GET /admin/test-llm` (isolates the LLM from retrieval), `POST /admin/reindex`.
+`GET /health`, `GET /health/deep`, `POST /feedback`, `POST /report-issue`,
+`GET /admin/stats`, `GET /admin/test-llm` (isolates the LLM from retrieval),
+`POST /admin/reindex`.
+
+**`/health` vs `/health/deep`.** `/health` is liveness only — no I/O, so a slow
+dependency can't fail the platform's probe. `/health/deep` is readiness: it
+queries `ecen_docs` and returns **503** if the vector store is unreachable or
+empty. Point Cloud Run's *startup* probe at `/health` and use `/health/deep`
+for alerting. Without it, an instance that had lost its database stayed in
+rotation and answered every question with the "I couldn't find anything"
+fallback — a data outage that looked like a content gap.
+
+`/health/deep` also reports the **database circuit breaker**. When Postgres is
+unreachable, psycopg2 spends `connect_timeout` (10s) per attempt, so during the
+2026-07-26 Supabase pause every request held a worker thread for ~10s to produce
+an error it could have produced instantly. After `PG_BREAKER_THRESHOLD` (3)
+consecutive failures the breaker opens and requests fail in microseconds for
+`PG_BREAKER_COOLDOWN` (30s), then one request is let through as a probe. Recovery
+is automatic — no restart needed. `GET /health/deep?force=1` bypasses the breaker
+for an authoritative "is it back yet?" check.
+
+The database is also probed once during startup, so a bad DSN shows up in the
+logs immediately instead of on the first user question. It is **non-fatal** on
+purpose: refusing to boot would take the app down over a dependency that may
+return on its own, and would break the graceful "temporarily unavailable" path.
+
+**`/admin/*` requires a token.** Set `ADMIN_TOKEN` (`openssl rand -hex 32`) and
+send it as the `X-Admin-Token` header:
+
+```bash
+curl -X POST http://127.0.0.1:8000/admin/reindex -H "X-Admin-Token: $ADMIN_TOKEN"
+```
+
+Auth **fails closed** — with `ADMIN_TOKEN` unset those endpoints return 503, so
+a forgotten env var can't silently leave them open. For local development only,
+`ALLOW_INSECURE_ADMIN=1` bypasses the check.
+
+> **Deploy checklist:** add `ADMIN_TOKEN` to the Cloud Run service env. The
+> nightly re-index is **not** affected — Cloud Scheduler triggers the
+> `ecen-reindex` Cloud Run Job, which runs `ingest.py --diff` directly and never
+> touches this endpoint. Until `ADMIN_TOKEN` is set, `/admin/*` returns 503;
+> that's the intended fail-closed behaviour, not a regression.
+>
+> Only one re-index runs at a time now; a request arriving mid-crawl returns
+> `{"status": "already_running"}` instead of starting a competing crawler. (In
+> production the in-process scheduler is off via `DISABLE_SCHEDULER=1`, so this
+> guards manual `/admin/reindex` calls and local runs.)
 
 ### 4.5 Run the frontend
 
@@ -241,7 +286,34 @@ penalized), **Faithfulness** (answer vs retrieved context; needs `EVAL_MODE=1`
 so `/chat/sync` returns context), **Scope & Hallucination Discipline**.
 
 Reports land in `eval_reports/deepeval_report.md` + `.json` (score + judge's
-written reason per case; overwritten each run; gitignored).
+written reason per case; gitignored). `deepeval_report.*` is overwritten each
+run, but **every run is also archived** to `eval_reports/history/<when>-<target>.json`
+— so evaluating a branch no longer destroys the record of what the previous
+build scored.
+
+#### Comparing two runs (use this to clear a branch)
+
+```bash
+# run the branch and diff it against a saved baseline in one step
+python scripts/deepeval_eval.py --delay 0 \
+    --baseline eval_reports/history/20260706-125011-prod.json
+
+# or diff two existing reports without re-running anything
+python scripts/deepeval_eval.py --compare BASELINE.json CANDIDATE.json
+```
+
+Output separates **REGRESSED** (passed before, fails now — the merge blocker;
+exit code 1) from **FIXED**, and lists **SCORE DRIFT** for cases whose verdict
+didn't change but whose judge score moved by ≥ `EVAL_DRIFT_EPSILON` (0.15) —
+early warning that something is sliding toward a threshold. Cases present in
+only one of the two runs are called out explicitly, so a filtered run
+(`--fast` / `--tag`) diffed against a full one can't masquerade as a clean
+result.
+
+> Compare against a baseline collected the **same way**. The Jul 6 baseline in
+> `history/` is 8 extended cases against *prod*; a full 60-case local run isn't
+> comparable to it. For a real branch check, capture a baseline from `main`
+> locally first, then run the branch.
 
 Judge calibration notes (learned the hard way): GEval scores jitter between
 runs, so GEval metrics use `EVAL_SOFT_THRESHOLD` (default 0.55 — observed

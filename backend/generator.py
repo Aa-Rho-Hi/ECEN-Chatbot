@@ -149,10 +149,16 @@ def _build_context(chunks: list[dict]) -> str:
 
 def _get_client() -> AsyncOpenAI:
     # Long read timeout: protected.gpt-5 can be slow to first token.
+    # max_retries is set explicitly (rather than left to the SDK default) so the
+    # streaming path's retry behaviour is visible here and tunable with the same
+    # LLM_MAX_RETRIES knob as the raw-httpx path below. The SDK only retries
+    # before the first token — once bytes are flowing a drop surfaces as an
+    # exception, which the caller turns into a buffered retry.
     return AsyncOpenAI(
         api_key=TAMU_API_KEY,
         base_url=TAMU_API_URL,
         timeout=httpx.Timeout(connect=15.0, read=300.0, write=15.0, pool=15.0),
+        max_retries=LLM_MAX_RETRIES,
     )
 
 
@@ -166,11 +172,44 @@ MAX_CONTINUATIONS = int(os.getenv("LLM_MAX_CONTINUATIONS", "1"))
 TEMPERATURE = float(os.getenv("LLM_TEMPERATURE", "0.1"))
 
 
+class LLMGatewayError(RuntimeError):
+    """The TAMU gateway failed to produce an answer (HTTP error, timeout, or an
+    empty stream). Distinct from "the model answered but had nothing to say" —
+    callers must tell the user the service is unavailable rather than implying
+    the department website lacks the information."""
+
+    def __init__(self, message: str, status: int | None = None, retryable: bool = False):
+        super().__init__(message)
+        self.status = status
+        self.retryable = retryable
+
+
+# Transient-failure retry policy for the gateway. 429 (rate limited) and 5xx
+# (gateway/model hiccup) are worth retrying; 4xx client errors are not — a bad
+# key or malformed payload will fail identically on every attempt.
+LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "2"))
+LLM_RETRY_BASE_DELAY = float(os.getenv("LLM_RETRY_BASE_DELAY", "1.0"))
+_RETRYABLE_STATUS = {408, 409, 425, 429, 500, 502, 503, 504}
+
+
+def _retry_delay(attempt: int) -> float:
+    """Exponential backoff with jitter, so a gateway blip doesn't turn into a
+    synchronized retry stampede from every in-flight request."""
+    import random
+    return LLM_RETRY_BASE_DELAY * (2 ** attempt) * (0.5 + random.random())
+
+
 async def _stream_once(messages: list[dict]) -> tuple[str, str]:
     """One streamed completion. Returns (text, finish_reason).
 
     finish_reason is "stop" on a complete answer, "length" if the model hit the
     token cap (i.e. the answer was truncated and should be continued).
+
+    Raises LLMGatewayError when the gateway returns a non-200 or the stream
+    yields no content at all. Previously the status code was only logged, so a
+    429 or 502 looked exactly like a successful empty answer and the user was
+    told the information wasn't on the website — a misdiagnosis that hid real
+    outages.
     """
     import httpx
     import json as _json
@@ -189,38 +228,81 @@ async def _stream_once(messages: list[dict]) -> tuple[str, str]:
     timeout = httpx.Timeout(connect=15.0, read=300.0, write=15.0, pool=15.0)
     parts: list[str] = []
     finish_reason = ""
-    async with httpx.AsyncClient(timeout=timeout) as client:
-        async with client.stream(
-            "POST",
-            f"{TAMU_API_URL}/chat/completions",
-            headers={
-                "Authorization": f"Bearer {TAMU_API_KEY}",
-                "Content-Type": "application/json",
-            },
-            json=payload,
-        ) as resp:
-            log.info("TAMU raw status: %s", resp.status_code)
-            async for line in resp.aiter_lines():
-                line = line.strip()
-                log.debug("RAW SSE line: %r", line)
-                if not line.startswith("data:"):
-                    continue
-                data = line[5:].strip()
-                if data in ("[DONE]", ""):
-                    continue
-                try:
-                    obj = _json.loads(data)
-                    choice = obj.get("choices", [{}])[0]
-                    text = choice.get("delta", {}).get("content", "")
-                    if text:
-                        parts.append(text)
-                    fr = choice.get("finish_reason")
-                    if fr:
-                        finish_reason = fr
-                except Exception:
-                    pass
+    try:
+        async with httpx.AsyncClient(timeout=timeout) as client:
+            async with client.stream(
+                "POST",
+                f"{TAMU_API_URL}/chat/completions",
+                headers={
+                    "Authorization": f"Bearer {TAMU_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                json=payload,
+            ) as resp:
+                log.info("TAMU raw status: %s", resp.status_code)
+                if resp.status_code != 200:
+                    # Must drain the body before touching .text on a streamed
+                    # response, or httpx raises ResponseNotRead.
+                    body = ""
+                    try:
+                        await resp.aread()
+                        body = resp.text[:500]
+                    except Exception:  # noqa: BLE001
+                        pass
+                    raise LLMGatewayError(
+                        f"TAMU gateway returned HTTP {resp.status_code}: {body}",
+                        status=resp.status_code,
+                        retryable=resp.status_code in _RETRYABLE_STATUS,
+                    )
+                async for line in resp.aiter_lines():
+                    line = line.strip()
+                    log.debug("RAW SSE line: %r", line)
+                    if not line.startswith("data:"):
+                        continue
+                    data = line[5:].strip()
+                    if data in ("[DONE]", ""):
+                        continue
+                    try:
+                        obj = _json.loads(data)
+                        choice = obj.get("choices", [{}])[0]
+                        text = choice.get("delta", {}).get("content", "")
+                        if text:
+                            parts.append(text)
+                        fr = choice.get("finish_reason")
+                        if fr:
+                            finish_reason = fr
+                    except Exception:
+                        pass
+    except httpx.TimeoutException as e:
+        raise LLMGatewayError(f"TAMU gateway timed out: {e}", retryable=True) from e
+    except httpx.HTTPError as e:
+        raise LLMGatewayError(f"TAMU gateway transport error: {e}", retryable=True) from e
+
+    # A 200 that streamed nothing is a gateway-side failure too (dropped
+    # connection, upstream model error serialized as an empty stream).
+    if not parts and not finish_reason:
+        raise LLMGatewayError("TAMU gateway returned an empty stream", retryable=True)
 
     return "".join(parts), finish_reason
+
+
+async def _stream_once_with_retry(messages: list[dict]) -> tuple[str, str]:
+    """_stream_once plus exponential-backoff retry on transient gateway errors."""
+    import asyncio
+
+    last: LLMGatewayError | None = None
+    for attempt in range(LLM_MAX_RETRIES + 1):
+        try:
+            return await _stream_once(messages)
+        except LLMGatewayError as e:
+            last = e
+            if not e.retryable or attempt == LLM_MAX_RETRIES:
+                raise
+            delay = _retry_delay(attempt)
+            log.warning("LLM gateway attempt %d/%d failed (%s); retrying in %.1fs",
+                        attempt + 1, LLM_MAX_RETRIES + 1, e, delay)
+            await asyncio.sleep(delay)
+    raise last if last else LLMGatewayError("LLM gateway failed")
 
 
 def _history_messages(history: list[dict] | None) -> list[dict]:
@@ -408,7 +490,16 @@ async def generate(question: str, chunks: list[dict], history: list[dict] | None
 
     full = ""
     for attempt in range(MAX_CONTINUATIONS + 1):
-        text, finish_reason = await _stream_once(messages)
+        try:
+            text, finish_reason = await _stream_once_with_retry(messages)
+        except LLMGatewayError:
+            # A continuation pass failing shouldn't discard a usable partial
+            # answer — return what we have. Only a first-pass failure is fatal,
+            # and that propagates so the caller can say the service is down.
+            if attempt == 0:
+                raise
+            log.warning("Continuation pass %d failed; returning partial answer", attempt)
+            break
         full += text
         log.info("generate() pass %d: +%d chars, finish_reason=%r",
                  attempt, len(text), finish_reason)

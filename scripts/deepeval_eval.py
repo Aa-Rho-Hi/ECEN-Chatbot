@@ -495,19 +495,55 @@ def _run_metrics(case: dict, answer: str, context: list[str]) -> list[dict]:
 # ---------------------------------------------------------------------------
 # Report
 # ---------------------------------------------------------------------------
+HISTORY_DIR = os.path.join(REPORT_DIR, "history")
+
+
+def _archive_slug(meta: dict) -> str:
+    """Stable, sortable filename for one run: when + what it targeted."""
+    when = meta.get("when", "").replace("-", "").replace(":", "").replace(" ", "-")
+    base = meta.get("base_url", "")
+    if "localhost" in base or "127.0.0.1" in base:
+        target = "local"
+    elif "run.app" in base:
+        target = "prod"
+    else:
+        target = "other"
+    return f"{when or 'unknown'}-{target}"
+
+
 def _write_report(results: list[dict], meta: dict) -> str:
     os.makedirs(REPORT_DIR, exist_ok=True)
+    os.makedirs(HISTORY_DIR, exist_ok=True)
     json_path = os.path.join(REPORT_DIR, "deepeval_report.json")
     md_path = os.path.join(REPORT_DIR, "deepeval_report.md")
 
     with open(json_path, "w") as f:
         json.dump({"meta": meta, "results": results}, f, indent=2)
 
+    # Also keep an immutable copy. deepeval_report.json used to be overwritten
+    # by every run, so the moment you evaluated a branch you destroyed the only
+    # record of what the previous build scored — which is precisely what you
+    # need to answer "did quality shift?". Archived runs feed --compare.
+    slug = _archive_slug(meta)
+    with open(os.path.join(HISTORY_DIR, f"{slug}.json"), "w") as f:
+        json.dump({"meta": meta, "results": results}, f, indent=2)
+
     passed = [r for r in results if r["passed"]]
     failed = [r for r in results if not r["passed"]]
-    lines = [
-        "# DeepEval regression report",
-        "",
+    lines = ["# DeepEval regression report", ""]
+    if meta.get("invalid"):
+        lines += [
+            "> ## ⚠️ THIS RUN IS NOT VALID",
+            ">",
+            f"> The backend failed on {meta.get('backend_errors')} of "
+            f"{meta.get('cases_attempted')} attempted cases"
+            + (" and the run was aborted early." if meta.get("aborted") else "."),
+            "> These results describe a **backend outage**, not answer quality.",
+            "> Do not compare against them and do not treat them as regressions.",
+            "> Check `curl -s localhost:8000/health/deep`, fix, and re-run.",
+            "",
+        ]
+    lines += [
         f"- **When:** {meta['when']}",
         f"- **Target:** {meta['base_url']}",
         f"- **Judge:** {meta['judge_model']} (threshold {meta['threshold']})"
@@ -544,10 +580,141 @@ def _write_report(results: list[dict], meta: dict) -> str:
 
 
 # ---------------------------------------------------------------------------
+# Run-to-run comparison
+# ---------------------------------------------------------------------------
+# GEval scores jitter run-to-run (see the SOFT_THRESHOLD note above), so a raw
+# score delta is noise unless it's large. Only movement past this is reported as
+# a score shift; pass/fail flips are always reported regardless of magnitude.
+SCORE_DRIFT_EPSILON = float(os.getenv("EVAL_DRIFT_EPSILON", "0.15"))
+
+# Stop the run after this many consecutive backend errors. A dead database or a
+# down LLM gateway fails every remaining case identically, so continuing only
+# spends judge tokens to produce a report that misattributes an outage to answer
+# quality. 0 disables the guard.
+ABORT_AFTER_ERRORS = int(os.getenv("EVAL_ABORT_AFTER_ERRORS", "5"))
+# A run with more than this fraction of backend errors is marked invalid and
+# refused as comparison input.
+INVALID_ERROR_RATE = float(os.getenv("EVAL_INVALID_ERROR_RATE", "0.2"))
+
+
+def _load_run(path: str) -> dict:
+    with open(path) as f:
+        return json.load(f)
+
+
+def _by_id(run: dict) -> dict[str, dict]:
+    return {r["id"]: r for r in run.get("results", [])}
+
+
+def compare_runs(baseline_path: str, candidate_path: str) -> int:
+    """Diff two report JSONs case-by-case. Returns a shell exit code:
+    0 = no regressions, 1 = at least one case regressed.
+
+    Answers "did quality shift?" directly, instead of leaving you to eyeball two
+    markdown tables. Cases present in only one run are called out rather than
+    silently ignored — a filtered run (--fast/--tag) compared against a full one
+    would otherwise look like a pile of fixes or regressions.
+    """
+    base, cand = _load_run(baseline_path), _load_run(candidate_path)
+
+    # Refuse to compare a run that couldn't reach the backend. Diffing an
+    # outage against a healthy run reports every case as a regression, which
+    # reads as a catastrophic quality drop and is pure noise.
+    bad = [(label, run) for label, run in (("baseline", base), ("candidate", cand))
+           if run.get("meta", {}).get("invalid")]
+    if bad:
+        print("=" * 70)
+        print("COMPARISON REFUSED — a run is not valid evidence about quality")
+        print("=" * 70)
+        for label, run in bad:
+            m = run["meta"]
+            print(f"  {label}: {m.get('when')} → {m.get('base_url')}")
+            print(f"    backend errors: {m.get('backend_errors')}"
+                  f"/{m.get('cases_attempted')} cases"
+                  + ("  (run aborted early)" if m.get("aborted") else ""))
+        print()
+        print("  The backend was failing during that run, so its results")
+        print("  describe an outage, not answer quality. Fix the backend")
+        print("  (curl -s localhost:8000/health/deep) and re-run.")
+        print("=" * 70)
+        return 2
+
+    b, c = _by_id(base), _by_id(cand)
+
+    shared = sorted(set(b) & set(c))
+    only_base = sorted(set(b) - set(c))
+    only_cand = sorted(set(c) - set(b))
+
+    regressed = [i for i in shared if b[i]["passed"] and not c[i]["passed"]]
+    fixed = [i for i in shared if not b[i]["passed"] and c[i]["passed"]]
+
+    print("=" * 70)
+    print("DeepEval run comparison")
+    print("=" * 70)
+    print(f"  baseline : {baseline_path}")
+    print(f"             {base.get('meta', {}).get('when', '?')} → "
+          f"{base.get('meta', {}).get('base_url', '?')}")
+    print(f"  candidate: {candidate_path}")
+    print(f"             {cand.get('meta', {}).get('when', '?')} → "
+          f"{cand.get('meta', {}).get('base_url', '?')}")
+    print(f"  cases compared: {len(shared)}")
+    if only_base:
+        print(f"  ! only in baseline ({len(only_base)}): {', '.join(only_base)}")
+    if only_cand:
+        print(f"  ! only in candidate ({len(only_cand)}): {', '.join(only_cand)}")
+    print()
+
+    if regressed:
+        print(f"REGRESSED ({len(regressed)}) — passed before, fails now:")
+        for i in regressed:
+            fails = c[i]["deterministic_failures"] + [
+                f"{m['metric']} {m['score']}" for m in c[i]["metrics"]
+                if not m["passed"]]
+            print(f"  ✗ {i}: {c[i]['question'][:60]}")
+            for f_ in fails:
+                print(f"      {f_}")
+        print()
+    else:
+        print("REGRESSED (0) — nothing that passed before is failing now.\n")
+
+    if fixed:
+        print(f"FIXED ({len(fixed)}):")
+        for i in fixed:
+            print(f"  ✓ {i}: {c[i]['question'][:60]}")
+        print()
+
+    # Score drift on cases whose verdict didn't change — an early warning that
+    # something is degrading before it crosses a threshold.
+    drift = []
+    for i in shared:
+        bm = {m["metric"]: m["score"] for m in b[i]["metrics"]}
+        for m in c[i]["metrics"]:
+            if m["metric"] not in bm:
+                continue
+            delta = m["score"] - bm[m["metric"]]
+            if abs(delta) >= SCORE_DRIFT_EPSILON:
+                drift.append((i, m["metric"], bm[m["metric"]], m["score"], delta))
+    if drift:
+        print(f"SCORE DRIFT (|Δ| ≥ {SCORE_DRIFT_EPSILON}, verdict unchanged):")
+        for i, metric, was, now, delta in sorted(drift, key=lambda d: d[4]):
+            print(f"  {'↓' if delta < 0 else '↑'} {i} {metric}: "
+                  f"{was:.2f} → {now:.2f} ({delta:+.2f})")
+        print()
+
+    bp = sum(1 for i in shared if b[i]["passed"])
+    cp = sum(1 for i in shared if c[i]["passed"])
+    print(f"SUMMARY: {bp}/{len(shared)} → {cp}/{len(shared)} "
+          f"({cp - bp:+d} on shared cases)")
+    print("=" * 70)
+    return 1 if regressed else 0
+
+
+# ---------------------------------------------------------------------------
 # Runner
 # ---------------------------------------------------------------------------
 def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
-        delay: float = DEFAULT_DELAY, no_llm: bool = False) -> int:
+        delay: float = DEFAULT_DELAY, no_llm: bool = False,
+        baseline: Optional[str] = None) -> int:
     if not no_llm and not os.getenv("OPENAI_API_KEY"):
         print("OPENAI_API_KEY is not set. Export it, or pass --no-llm for "
               "deterministic-only checks.", file=sys.stderr)
@@ -563,6 +730,9 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
           f"(judge: {'OFF' if no_llm else JUDGE_MODEL}, delay {delay}s)\n")
 
     results: list[dict] = []
+    backend_errors = 0        # cases where the backend, not the answer, failed
+    consecutive_errors = 0
+    aborted = False
     for i, case in enumerate(cases):
         if i > 0 and delay > 0:
             time.sleep(delay)
@@ -580,15 +750,31 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
                             "metrics": [], "answer_preview": ""})
             continue
 
+        # A backend error is NOT an answer-quality result. Judging it wastes an
+        # API call per case and, worse, files the outage in the report as a
+        # keyword failure — which is how a dead database comes to look like 128
+        # quality regressions.
+        backend_down = status >= 500 or (status != 200 and not answer)
+        if backend_down:
+            consecutive_errors += 1
+            backend_errors += 1
+        else:
+            consecutive_errors = 0
+
         det_failures = _check(answer, status, case)
-        metric_results = [] if no_llm else _run_metrics(case, answer, context)
+        if backend_down:
+            det_failures = [f"backend error: HTTP {status} (no answer returned)"]
+            metric_results = []
+        else:
+            metric_results = [] if no_llm else _run_metrics(case, answer, context)
         ok = not det_failures and all(m["passed"] for m in metric_results)
         elapsed = time.time() - t0
 
         verdict = "PASS " if ok else "FAIL "
         print(f"[{cid:>4}] {verdict}[{case['priority']}] {display_q!r} ({elapsed:.1f}s)")
         for d in det_failures:
-            print(f"           keyword: {d}")
+            label = "backend" if backend_down else "keyword"
+            print(f"           {label}: {d}")
         for m in metric_results:
             flag = "ok " if m["passed"] else "LOW"
             print(f"           {flag} {m['metric']}: {m['score']}"
@@ -597,19 +783,47 @@ def run(priority_filter: Optional[str] = None, tag_filter: Optional[str] = None,
         results.append({
             "id": cid, "priority": case["priority"],
             "tags": case.get("tags", []), "question": q, "passed": ok,
+            "http_status": status,
             "deterministic_failures": det_failures, "metrics": metric_results,
             # Full-ish answer so faithfulness flags can be adjudicated from
             # the report without re-running the case.
             "answer_preview": (answer or "")[:2000],
         })
 
+        if ABORT_AFTER_ERRORS > 0 and consecutive_errors >= ABORT_AFTER_ERRORS:
+            aborted = True
+            print(f"\n{'!' * 70}")
+            print(f"ABORTED: {consecutive_errors} consecutive backend errors.")
+            print("The backend is not answering — this is an outage, not an")
+            print("answer-quality result. Continuing would spend a judge call")
+            print("per remaining case and produce a report that looks like a")
+            print("pile of regressions.")
+            print("  Check:  curl -s localhost:8000/health/deep | head -c 400")
+            print(f"{'!' * 70}")
+            break
+
+    total_attempted = len(results)
+    invalid = aborted or (total_attempted > 0
+                          and backend_errors / total_attempted > INVALID_ERROR_RATE)
     meta = {"when": time.strftime("%Y-%m-%d %H:%M:%S"), "base_url": BASE_URL,
             "judge_model": JUDGE_MODEL, "threshold": JUDGE_THRESHOLD,
-            "no_llm": no_llm}
+            "no_llm": no_llm,
+            # Recorded so this run can never be mistaken for evidence about
+            # answer quality — compare_runs refuses to use an invalid run.
+            "backend_errors": backend_errors,
+            "cases_attempted": total_attempted,
+            "cases_planned": len(cases),
+            "aborted": aborted,
+            "invalid": invalid}
     md_path = _write_report(results, meta)
     failed = sum(1 for r in results if not r["passed"])
     print(f"\n{len(results) - failed} passed, {failed} failed out of {len(results)}")
     print(f"Report: {md_path}")
+    print(f"Archived: {os.path.join(HISTORY_DIR, _archive_slug(meta) + '.json')}")
+
+    if baseline:
+        print()
+        compare_runs(baseline, os.path.join(REPORT_DIR, "deepeval_report.json"))
     return 1 if failed else 0
 
 
@@ -622,6 +836,16 @@ if __name__ == "__main__":
                         help=f"Seconds between requests (default {DEFAULT_DELAY}; 0 locally)")
     parser.add_argument("--no-llm", action="store_true",
                         help="Deterministic keyword checks only (no judge, no API key)")
+    parser.add_argument("--baseline", metavar="REPORT.json",
+                        help="After the run, diff it against this archived report "
+                             "(see eval_reports/history/)")
+    parser.add_argument("--compare", nargs=2, metavar=("BASELINE.json", "CANDIDATE.json"),
+                        help="Compare two existing reports and exit (runs no cases)")
     args = parser.parse_args()
+
+    if args.compare:
+        sys.exit(compare_runs(*args.compare))
+
     sys.exit(run(priority_filter="P0" if args.fast else None,
-                 tag_filter=args.tag, delay=args.delay, no_llm=args.no_llm))
+                 tag_filter=args.tag, delay=args.delay, no_llm=args.no_llm,
+                 baseline=args.baseline))

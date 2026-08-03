@@ -390,6 +390,84 @@ def research_area_names() -> list[str]:
     return list(graph["nodes"]["research_areas"].keys())
 
 
+def is_area_list_query(query: str) -> bool:
+    """True for "what research areas does ECE work in" style questions.
+
+    The mirror of is_degree_list_query. Without it these questions fell through
+    to open-ended retrieval, where the `research` section is only ~40 of ~1,860
+    chunks (news alone is ~836) — so the top-k filled with news and the model
+    answered "I don't have specific details", despite the graph holding all
+    eleven areas with descriptions and faculty.
+
+    Deliberately narrow: this must fire for "what research areas are there" but
+    NOT for "who works on power systems" (an area *roster* question, handled by
+    build_area_roster) or "tell me about the security area" (a single area).
+    """
+    q = (query or "").lower()
+
+    # Questions about people, courses or admissions in a research context are
+    # someone else's job — routing them here would replace a specific answer
+    # with a generic list of areas.
+    if any(w in q for w in ("who ", "whom", "faculty", "professor", "researcher",
+                            "contact", "advisor", "mentor", "course", "class",
+                            "deadline", "admission", "apply", "scholarship")):
+        return False
+
+    has_area_word = any(w in q for w in (
+        "research area", "research areas", "areas of research", "research focus",
+        "research foci", "research topics", "research group", "research groups",
+        "specialize", "specialization", "specialties", "research strength"))
+    if not has_area_word:
+        return False
+
+    # An enumeration ask, not a question about one specific named area.
+    has_ask = any(w in q for w in (
+        "what", "which", "list", "all", "offer", "have", "available",
+        "does", "do ", "kind", "type", "cover"))
+    if not has_ask:
+        return False
+
+    # "tell me about the Security research area" names a specific one — let
+    # retrieval answer it with that page's detail instead of a bare list.
+    named = [a.lower() for a in research_area_names()]
+    if any(a in q for a in named):
+        return False
+    return True
+
+
+def build_area_list_roster() -> str | None:
+    """Complete research-area list from the graph (never truncated).
+
+    Mirrors build_degree_roster: the graph is authoritative, so the answer can't
+    silently drop areas just because the crawled research index page was thin or
+    stale.
+    """
+    graph = _load_graph()
+    areas = list(graph["nodes"]["research_areas"].values())
+    if not areas:
+        return None
+
+    lines = [
+        "--- Complete TAMU ECE Research Areas (from knowledge graph) ---",
+        "",
+        f"This is the authoritative, COMPLETE list of all {len(areas)} research "
+        "areas in the department. Do NOT omit any of them and do NOT add a "
+        "disclaimer about the list being incomplete or about not having details.",
+        "",
+        "HOW TO ANSWER: name every area below with a one-line description. "
+        "Mention a few representative faculty only if the user asked who works "
+        "in an area.",
+        "",
+    ]
+    for a in areas:
+        desc = (a.get("description") or "").strip().rstrip(",")
+        n_faculty = len(a.get("faculty") or [])
+        lines.append(f"• {a['name']}"
+                     + (f" — {desc}" if desc else "")
+                     + (f" ({n_faculty} faculty)" if n_faculty else ""))
+    return "\n".join(lines)
+
+
 def is_full_faculty_query(query: str) -> bool:
     """True for 'list all faculty' style questions with no specific area/name."""
     q = (query or "").lower()
